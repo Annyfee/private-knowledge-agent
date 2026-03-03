@@ -54,8 +54,8 @@ async def planner_node(state:ResearchAgent):
     不要输出任何多余的解释或废话，只输出JSON。
     """
 
-    # 只发System与User Query，保证上下文干净  这种写法用于单轮对话，x+x用于多轮对话
-    messages = [SystemMessage(content=sys_prompt)] + state["messages"][-20:]
+    # 选择最近5条相关数据返回
+    messages = [SystemMessage(content=sys_prompt)] + state["messages"][-8:]
 
     safe_msg = clean_msg_for_deepseek(messages)
 

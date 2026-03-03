@@ -110,7 +110,7 @@ async def surfer_node(state:Researcher,tools=None):
     try:
         response = await llm.bind_tools(tools).ainvoke(safe_messages)
 
-        # 【新增改动点】: 打印它决定干什么，让你心里有数
+        # 打印它的行为逻辑
         if response.tool_calls:
             tools_name = ",".join([t['name'] for t in response.tool_calls])
             logger.success(f"🤖 {prefix} 决策: 调用 {tools_name}")
