@@ -3,7 +3,7 @@ import json
 import os
 import requests
 
-BACKEND_URL = os.getenv("BACKEND_URL")
+BACKEND_URL = os.getenv("BACKEND_URL") or "http://localhost"
 
 
 def stream_from_backend(user_input,session_id):
