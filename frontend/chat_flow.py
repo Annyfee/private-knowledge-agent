@@ -4,28 +4,6 @@ import streamlit as st
 from backend_client import stream_from_backend
 
 
-# 防止渲染前输出
-def looks_like_call_swarm_prefix(text):
-    if not text:
-        return False
-    t = text.upper()
-    target = "CALL_SWARM"
-    return target.startswith(t)
-
-
-# 判断是否是脏数据
-def judge_manager(text):
-    if not text:
-        return False
-    return bool(re.search(r"(?i)\bcall_swarm\b",text))
-
-
-# 清洗CALL_SWARM
-def sanitize_text(text):
-    if not text:
-        return ""
-    return re.sub(r"(?i)^\s*call_swarm[\s:-]*","",text)
-
 # 优化数据来源展示
 def format_sources_simple(text):
     if not text:
@@ -55,11 +33,10 @@ def handle_chat_turn(prompt):
         final_response = ""
         tool_logs = []
 
-        # 判断manager状态:闲聊/分配任务
+        # 仅由工具事件判断“研究模式”
         is_research = False
         # 等待文本
         shown_waiting_text = False
-        manager_buffer = "" # 做流式token收集，防止所需token不足
 
         # 调用工具函数,接收数据
         for data in stream_from_backend(prompt,st.session_state.session_id):
@@ -83,33 +60,16 @@ def handle_chat_turn(prompt):
                     status_container.info(content)
                 continue
             elif event_type == "token": # 流式输出
-                if source == "writer":
-                    if content:
-                        full_response += content
-                        final_response = format_sources_simple(sanitize_text(full_response))
-                        response_placeholder.markdown(final_response)
-                elif source == "manager":
-                    # 闲聊状态正常输出
-                    if not is_research:
-                        manager_buffer += content or ""
-                        if judge_manager(manager_buffer):
-                            is_research = True
-                            full_response = "" # 防止manager文本残留
-                            final_response = ""
-                            manager_buffer = ""
-                        elif looks_like_call_swarm_prefix(manager_buffer):
-                            pass
-                        else:
-                            full_response += manager_buffer
-                            manager_buffer = ""
-                            final_response = format_sources_simple(sanitize_text(full_response))
-                            response_placeholder.markdown(final_response)
+                if content:
+                    full_response += content
+                    final_response = format_sources_simple(full_response)
+                    response_placeholder.markdown(final_response)
                 continue
             elif event_type == "message": # 整段消息返回
-                # 协议兜底
+                # 协议兜底:仅在没有流式时展示整段
                 if content and not final_response:
                     full_response += content
-                    final_response = format_sources_simple(sanitize_text(full_response))
+                    final_response = format_sources_simple(full_response)
                     response_placeholder.markdown(final_response)
                 continue
             elif event_type == "tool_start":

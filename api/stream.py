@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import uuid
 import time
 from loguru import logger
@@ -47,16 +48,7 @@ def adapt_event_for_ui(data:dict,fsm_state:dict,run_id:str,sid:str):
     if phase and phase != fsm_state["phase"]:
         fsm_state["phase"] = phase
         out.append(make_event("phase", run_id, sid, phase=phase, source=source)) # 更新状态
-    # token
     if t == "token":
-        # 命中脏数据隐藏 / 没命中正常传
-        if source == "manager" and any(x in text for x in ["CALL_SWARM",'"tasks"','"task"','"main_route"']):
-            out.append(make_event(
-                "status",run_id,sid,
-                source="system",
-                # content="🔍 正在识别需求并规划任务..."
-            ))
-            return out
         out.append(make_event("token",run_id,sid,source=source,content=text))
         return out
     if t == "message":

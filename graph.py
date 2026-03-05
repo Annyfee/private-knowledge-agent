@@ -5,7 +5,7 @@ from langgraph.types import Send
 from loguru import logger
 
 from agents.researcher.graph import build_researcher_graph
-from agents.manager import manager_node
+from agents.manager import manager_node, chat_node
 from agents.planner import planner_node
 from agents.writer import writer_node
 from state import ResearchAgent
@@ -13,7 +13,7 @@ from state import ResearchAgent
 
 
 def route(state:ResearchAgent):
-    return state.get("main_route","end_chat")
+    return state.get("main_route","chat")
 
 # 并发分发逻辑
 def distribute_tasks(state:ResearchAgent):
@@ -55,6 +55,7 @@ async def build_graph(checkpointer=None):
     workflow = StateGraph(ResearchAgent)
 
     workflow.add_node("manager",manager_node)
+    workflow.add_node("chat",chat_node)
     workflow.add_node("planner",planner_node)
     workflow.add_node("researcher",researcher_app)
     workflow.add_node("writer",writer_node)
@@ -66,6 +67,7 @@ async def build_graph(checkpointer=None):
         route,
         {
             "planner":"planner",
+            "chat":"chat",
             "end_chat":END
         }
     )
@@ -76,6 +78,7 @@ async def build_graph(checkpointer=None):
     )
     workflow.add_edge("researcher","writer")
     workflow.add_edge("writer",END)
+    workflow.add_edge("chat",END)
 
     if checkpointer is None:
         return workflow.compile(checkpointer=MemorySaver())

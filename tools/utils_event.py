@@ -1,5 +1,3 @@
-
-
 # 把langgraph的原始事件流，统一清洗成前端可消费的标准事件格式，并且过滤掉不该展示的内容
 def parse_langgraph_event(event):
     """
@@ -11,10 +9,9 @@ def parse_langgraph_event(event):
     meta = event.get("metadata",{}) or {} # 防止键不存在或为空
     node = meta.get("langgraph_node") # 标记事件来源节点
 
-
-    # LLM吐字:仅允许manager与writer输出到前端:token碎
-    if kind == "on_chat_model_stream":
-        if node not in ("writer", "manager"):
+    # LLM吐字-token流式:仅允许chat与writer两个节点吐字
+    if  kind == "on_chat_model_stream":
+        if node not in ("chat", "writer"):
             return None
         chunk = event.get("data", {}).get("chunk")
         content = getattr(chunk, "content", "")
@@ -60,48 +57,7 @@ def parse_langgraph_event(event):
                 "output":output[:200] + "..." if len(output) > 200 else output,
                 "source":node
             }
-    # 节点执行完成后触发(return结束)
+    # 节点执行完成后触发 / 因为所有节点都在token输出，这里不用管
     elif kind == "on_chain_end":
-        output = event["data"]["output"]
-        # DEBUG: 打印 writer 相关的 on_chain_end 事件
-        if node == "writer":
-            print(f"[DEBUG] on_chain_end for writer, output type: {type(output)}, keys: {output.keys() if isinstance(output, dict) else 'N/A'}")
-            if isinstance(output, dict):
-                print(f"[DEBUG] final_answer exists: {'final_answer' in output}, value preview: {str(output.get('final_answer', ''))[:100]}")
-        # writer：优先读 final_answer，避免 messages 合并污染
-        if node == "writer":
-            if isinstance(output, dict):
-                final_answer = output.get("final_answer")
-                if final_answer:
-                    if not isinstance(final_answer, str):
-                        final_answer = str(final_answer)
-                    return {
-                        "type": "message",
-                        "content": final_answer,
-                        "source": "writer"
-                    }
-                # 兜底：若没有 final_answer，再从 messages 找最后 AI
-                messages = output.get("messages", []) or []
-                for msg in reversed(messages):
-                    if getattr(msg, "type", "") == "ai" and getattr(msg, "content", ""):
-                        return {
-                            "type": "message",
-                            "content": msg.content,
-                            "source": "writer"
-                        }
-            return None
-        # manager：仅 end_chat 才允许输出 message
-        if node == "manager":
-            if not isinstance(output, dict):
-                return None
-            if output.get("main_route") != "end_chat":
-                return None
-            messages = output.get("messages", []) or []
-            for msg in reversed(messages):
-                if getattr(msg, "type", "") == "ai" and getattr(msg, "content", ""):
-                    return {
-                        "type": "message",
-                        "content": msg.content,
-                        "source": "manager"
-                    }
+        pass
     return None
