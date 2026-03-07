@@ -43,7 +43,7 @@ def render_sidebar(status):
             if status["mcp_online"]:
                 st.success("🟢 MCP服务在线")
             else:
-                st.warning("⚪ MCP服务未启动 (端口8003不通)")
+                st.warning("⚪ MCP服务未启动 （可能是协议不匹配或暂时无响应）")
         else:
             st.error("🔴 后端服务离线(请启动docker)")
 

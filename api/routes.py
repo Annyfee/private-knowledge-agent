@@ -7,7 +7,7 @@ from loguru import logger
 from pydantic import BaseModel
 from starlette.responses import JSONResponse, StreamingResponse
 from api.stream import event_generator
-
+from tools.registry import SERVICE_STATUS
 
 class ChatRequest(BaseModel):
     message:str
@@ -60,3 +60,7 @@ async def chat_endpoint(payload:ChatRequest,request:Request): # 其中payload与
             "X-Accel-Buffering": "no", # 不要缓冲
         },
     )
+
+@router.get("/service/status")
+async def service_status():
+    return SERVICE_STATUS

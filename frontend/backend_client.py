@@ -46,22 +46,19 @@ def stream_from_backend(user_input,session_id):
         yield {"type":"error","content":f"连接失败:{str(e)}"}
 
 def check_services_status():
-    """
-    检查服务是否在线
-    """
+    """检查服务是否在线"""
     status = {
-        "backend_online":False,
-        "mcp_online":False
+        "backend_online": False,
+        "mcp_online": False,
     }
     try:
-        r = requests.get(f"{BACKEND_URL}:8011/docs",timeout=1.5)
+        r = requests.get(f"{BACKEND_URL}:8011/service/status",timeout=1.5)
         if r.status_code == 200:
+            data = r.json()
             status["backend_online"] = True
+            status["mcp_online"] = data.get("mcp_online",False)
+        else:
+            status["backend_online"] = False
     except Exception:
         status["backend_online"] = False
-    try:
-        requests.get(f"{BACKEND_URL}:8003",timeout=1.5)
-        status["mcp_online"] = True
-    except Exception:
-        status["mcp_online"] = False
     return status

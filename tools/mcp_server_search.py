@@ -6,7 +6,14 @@ from loguru import logger
 from ddgs import DDGS
 import trafilatura
 
-mcp = FastMCP("SearchService",host="0.0.0.0",port=8003)
+mcp = FastMCP(
+    "SearchService",
+    host="0.0.0.0",   # 必须：让容器可访问宿主机上的 8003
+    port=8003,
+    streamable_http_path="/mcp", # mcp HTTP入口
+    json_response=True, # 返回JSON格式响应
+    stateless_http=True, # 无状态HTTP，每个请求独立，不依赖会话状态
+)
 
 
 SINGLE_FETCH_TIMEOUT_SEC = 25 # 单URL超时

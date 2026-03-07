@@ -10,6 +10,13 @@ from tools.rag_store import RAGStore
 
 global_rag_store = RAGStore()
 
+# 全局服务状态
+SERVICE_STATUS = {
+    "backend_online":True,
+    "mcp_online":False
+}
+
+
 # 定义 RAG 检索工具 (给 Agent 查库用)
 @tool
 def search_knowledge_base(query: str,config:RunnableConfig): # 声明使用RunnableConfig来提取我们最初定义的thread_id
@@ -41,8 +48,11 @@ async def load_all_tools():
         client = MultiServerMCPClient(mcp_config)
         mcp_tools = await client.get_tools()
         logger.success(f"✅ MCP 工具加载成功: {[t.name for t in mcp_tools]}")
+        # 记录成功状态
+        SERVICE_STATUS["mcp_online"] = True
     except Exception as e:
         logger.error(f"❌ MCP 连接失败: {e}")
         mcp_tools = []
-
+        # 记录失败状态
+        SERVICE_STATUS["mcp_online"] = False
     return mcp_tools + [search_knowledge_base]
