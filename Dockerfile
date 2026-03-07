@@ -13,12 +13,14 @@ WORKDIR /app
 COPY requirements.txt .
 
 # pip 稳定安装策略：主源 + 备用源 + 超时重试
-RUN python -m pip install --upgrade pip setuptools wheel && \
+RUN python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && \
     pip install --no-cache-dir -r requirements.txt \
-    -i https://pypi.org/simple \
-    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --extra-index-url https://mirrors.aliyun.com/pypi/simple \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
+    --trusted-host mirrors.aliyun.com \
     --default-timeout 120 \
-    --retries 5
+    --retries 8
 
 # 搬代码(源路径-目标路径/工作目录):把当前文件夹所有东西全部拷贝到容器里的/app文件夹下
 COPY . .
