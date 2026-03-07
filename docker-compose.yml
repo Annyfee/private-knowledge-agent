@@ -5,6 +5,13 @@
 # version: '3.8'
 
 services:
+  mcp-server:
+    build: .
+    container_name: mcp_server
+    command: ["python", "tools/mcp_server_search.py"]
+    ports:
+      - "8003:8003"
+    restart: always
   research-backend:
     # 构建位置(依靠当前目录的Dockerfile来构建) 与 是否自动重启
     build: .
@@ -26,7 +33,7 @@ services:
       - .env
 
     environment: # 端口号
-      - MCP_HOST=mcp_host # 环境变量注入，让后端获取
+      - MCP_HOST=mcp-server # 环境变量注入，让后端获取
 
-    extra_hosts: # IP地址
-      - mcp_host:host-gateway # 让mcp_host指向宿主机的ip地址
+    depends_on:
+      - mcp-server

@@ -12,8 +12,13 @@ WORKDIR /app
 # 拷贝依赖文件
 COPY requirements.txt .
 
-# 安装依赖(清华源加速)
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple # 不保留缓存目录
+# pip 稳定安装策略：主源 + 备用源 + 超时重试
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt \
+    -i https://pypi.org/simple \
+    --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    --default-timeout 120 \
+    --retries 5
 
 # 搬代码(源路径-目标路径/工作目录):把当前文件夹所有东西全部拷贝到容器里的/app文件夹下
 COPY . .

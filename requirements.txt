@@ -1,4 +1,4 @@
-ddgs==9.10.0
+ddgs>=9.10.0,<10
 fastapi==0.128.4
 FlashRank==0.2.10
 langchain_chroma==1.1.0
