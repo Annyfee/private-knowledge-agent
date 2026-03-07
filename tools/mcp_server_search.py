@@ -5,6 +5,7 @@ from loguru import logger
 
 from ddgs import DDGS
 import trafilatura
+from mcp.server.transport_security import TransportSecuritySettings
 
 mcp = FastMCP(
     "SearchService",
@@ -13,6 +14,11 @@ mcp = FastMCP(
     streamable_http_path="/mcp", # mcp HTTP入口
     json_response=True, # 返回JSON格式响应
     stateless_http=True, # 无状态HTTP，每个请求独立，不依赖会话状态
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,  # 关闭保护
+        allowed_hosts=["*"],  # 允许所有 Host
+        allowed_origins=["*"],  # 允许所有 Origin
+    )
 )
 
 
