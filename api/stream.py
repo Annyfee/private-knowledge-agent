@@ -1,10 +1,8 @@
 import asyncio
 import json
-import re
 import uuid
 import time
 from loguru import logger
-from tools.utils_event import parse_langgraph_event
 
 
 # 全局并发限制
@@ -12,7 +10,8 @@ MAX_CONCURRENT_USERS = asyncio.Semaphore(5)
 GRAPH_RUN_TIMEOUT_SEC = 240
 
 def _to_phase_from_source(source:str):
-    if source in ("manager","planner"):
+    """把LangGraph的节点名，映射成前端UI阶段名"""
+    if source == "planner":
         return "planning"
     if source in ("researcher","leader","surfer"):
         return "researching"
@@ -22,6 +21,7 @@ def _to_phase_from_source(source:str):
 
 # 统一事件封装函数
 def make_event(event_type:str,run_id:str,sid:str,**payload):
+    """统一构造成发给前端的事件对象"""
     return{
         "type":event_type,
         "protocol_version":"v1",
@@ -31,61 +31,85 @@ def make_event(event_type:str,run_id:str,sid:str,**payload):
         **payload
     }
 
-
-def adapt_event_for_ui(data:dict,fsm_state:dict,run_id:str,sid:str):
-    """
-    输入 parse_langgraph_event的结果，输出 0-n 个统一UI事件
-    只允许输出协议事件，禁止透传原始data
-    """
-    if not data:
-        return [] # 无UI事件
-    out = [] # 收集UI
-    source = data.get("source","unknown")
-    t = data.get("type", "unknown")
-    text = data.get("content","")
-    phase = _to_phase_from_source(source)
+def _phase_event(node:str,fsm_state:dict,run_id:str,sid:str):
+    """判断这次事件是否是 阶段切换 """
+    phase = _to_phase_from_source(node)
     # 根据来源事件，自动判断并切换到对应的阶段 - phase自动推进并变化
-    if phase and phase != fsm_state["phase"]:
-        fsm_state["phase"] = phase
-        out.append(make_event("phase", run_id, sid, phase=phase, source=source)) # 更新状态
-    if t == "token":
-        out.append(make_event("token",run_id,sid,source=source,content=text))
+    if not phase or phase == fsm_state["phase"]:
+        return None
+    fsm_state["phase"] = phase
+    return make_event("phase", run_id, sid, phase=phase, source=node)
+
+
+def _extract_text_content(event:dict):
+    """从LangGraph里的stream事件里，提取出真正能展示的文本"""
+    chunk = event.get("data", {}).get("chunk")
+    content = getattr(chunk, "content", "")
+    if content is None:
+        return None
+    if isinstance(content, list):
+        # 兼容富文本/分片结构
+        content = "".join(
+            c if isinstance(c, str) else str(c.get("text", "")) if isinstance(c, dict) else str(c)
+            for c in content
+        )
+    elif not isinstance(content, str):
+        content = str(content)
+    if not content.strip():
+        return None
+    return content
+
+def _sanitize_tool_input(event:dict):
+    """清洗工具调用下的无关参数(源于框架内部)"""
+    raw_input = event.get("data", {}).get("input", {})
+    if isinstance(raw_input, dict):
+        safe_input = {}
+        for k, v in raw_input.items():
+            if k not in ("runtime", "callbacks", "config"):
+                safe_input[k] = v
+        return safe_input
+    # 非dict下兜底
+    return {"value":raw_input}
+
+def _transform_event(event:dict,fsm_state:dict,run_id:str,sid:str):
+    """把一个LangGraph原始事件，转换成多个UI事件"""
+    kind = event.get("event")
+    meta = event.get("metadata")
+    node = meta.get("langgraph_node")
+    out = []
+
+    phase_event = _phase_event(node,fsm_state,run_id,sid)
+    if phase_event:
+        out.append(phase_event)
+    # 流式
+    if kind == "on_chat_model_stream":
+        if node not in ("chat", "writer"):
+            return out
+        content = _extract_text_content(event)
+        if content:
+            out.append(make_event("token",run_id,sid,content=content))
         return out
-    if t == "message":
-        out.append(make_event("message",run_id,sid,source=source,content=text))
-        return out
-    if t == "tool_start":
+    # 工具调用
+    elif kind == "on_tool_start":
+        tool_name = event.get("name", "")
+        safe_input = _sanitize_tool_input(event)
         out.append(make_event(
             "tool_start",run_id,sid,
-            source=source,
-            tool=data.get("tool",""),
-            input=data.get("input",{})
+            source=node,
+            tool=tool_name,
+            input=safe_input
         ))
         return out
-    if t == "tool_end":
-        out.append(make_event(
-            "tool_end",run_id,sid,
-            source=source,
-            tool=data.get("tool",""),
-            output=data.get("output",{}) # 注意区分:input & output
-        ))
-        return out
-    if t == "error":
-        out.append(make_event(
-            "error",run_id,sid,
-            source=source,
-            content=text or "未知错误"
-        ))
-        return out
-    # 未知事件统一转status，不透传
-    out.append(make_event(
-        "status",run_id,sid,
-        source=source,
-        content=text or f'{t}'
-    ))
+    # 事件节点结束，希望捕获某个节点的信息
+    elif kind == "on_chain_end" and node == "planner":
+        output = event.get("data").get("output")
+        tasks = []
+        if isinstance(output,dict):
+            tasks = output.get("tasks", [])
+        if tasks:
+            # 发送任务列表
+            out.append(make_event("tasks",run_id,sid,tasks=tasks))
     return out
-
-
 
 # 流式输出
 async def event_generator(graph,inputs:dict,config:dict,sid:str):
@@ -100,8 +124,7 @@ async def event_generator(graph,inputs:dict,config:dict,sid:str):
             async with asyncio.timeout(GRAPH_RUN_TIMEOUT_SEC):
                 # 启动Graph流式执行 - 这里只负责丢数据，展示什么数据(如on_tool_start)由前端来管
                 async for event in graph.astream_events(inputs,config,version="v2"):# 产出原始事件
-                    data = parse_langgraph_event(event)
-                    ui_events = adapt_event_for_ui(data,fsm_state,run_id,sid)
+                    ui_events = _transform_event(event,fsm_state,run_id,sid)
                     for data in ui_events:
                         # 返回SSE协议格式数据
                         yield f"data: {json.dumps(data,ensure_ascii=False)}\n\n"

@@ -75,12 +75,14 @@ def render_history():
 
         with st.chat_message(role, avatar=avatar):
             # 有工具日志，则渲染
-            if "steps" in msg and msg["steps"]:
+            if "tools" in msg and msg["tools"]:
                 with st.status("✅ 历史思考过程", state="complete", expanded=False) as status:
-                    for step in msg["steps"]:
-                        st.write(f"🔨 调用工具: **{step['name']}**")
+                    with status.expander("**📋 研究任务拆解:**", expanded=True):
+                        st.json(msg["tasks"])  # 在 status 内显示
+                    for tool in msg["tools"]:
+                        st.write(f"🔨 调用工具: **{tool['name']}**")
                         with status.expander("查看参数详情:"):
-                            st.json(step['input'])
+                            st.json(tool['input'])
 
             # 再渲染正文
             st.markdown(msg["content"])

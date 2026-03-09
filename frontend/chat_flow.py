@@ -1,20 +1,6 @@
 # 处理对话时逻辑
-import re
 import streamlit as st
 from backend_client import stream_from_backend
-
-
-# 优化数据来源展示
-def format_sources_simple(text):
-    if not text:
-        return ""
-    marker = "数据来源"
-    if marker not in text:
-        return text
-    head,tail = text.split(marker,1)
-    tail = re.sub(r"(?<!^)\[(\d+)\]",r"\n[\1]",tail)
-    return head + marker + tail
-
 
 def handle_chat_turn(prompt):
     # A.显示用户提问
@@ -30,8 +16,8 @@ def handle_chat_turn(prompt):
             status_container = st.status("🤔 Agent正在思考...",expanded=True)
         response_placeholder = st.empty()
         full_response = ""
-        final_response = ""
         tool_logs = []
+        tasks_logs = []
 
         # 仅由工具事件判断“研究模式”
         is_research = False
@@ -42,7 +28,7 @@ def handle_chat_turn(prompt):
         for data in stream_from_backend(prompt,st.session_state.session_id):
             content = data.get("content", "")
             event_type = data.get("type","")
-            source = data.get("source","")
+            # source = data.get("source","")
             if event_type == "phase":
                 phase = data.get("phase","")
                 phase_map = {
@@ -54,23 +40,10 @@ def handle_chat_turn(prompt):
                 if msg:
                     status_container.info(msg)
                 continue
-            elif event_type == "status":
-                # 只在后端真有内容时展示
-                if content:
-                    status_container.info(content)
-                continue
             elif event_type == "token": # 流式输出
                 if content:
                     full_response += content
-                    final_response = format_sources_simple(full_response)
-                    response_placeholder.markdown(final_response)
-                continue
-            elif event_type == "message": # 整段消息返回
-                # 协议兜底:仅在没有流式时展示整段
-                if content and not final_response:
-                    full_response += content
-                    final_response = format_sources_simple(full_response)
-                    response_placeholder.markdown(final_response)
+                    response_placeholder.markdown(full_response)
                 continue
             elif event_type == "tool_start":
                 if not shown_waiting_text:
@@ -85,7 +58,12 @@ def handle_chat_turn(prompt):
                 with status_container.expander(f"⚙️ 展开{tool_name}底层参数"):
                     st.json(tool_input) # 参数细节
                 continue
-            elif event_type == "tool_end":
+            elif event_type == "tasks":
+                tasks = data.get("tasks", [])  # 默认值改为 []
+                if tasks:
+                    with status_container.expander("**📋 研究任务拆解:**",expanded=True):
+                        st.json(tasks)  # 在 status 内显示
+                tasks_logs.append(tasks)
                 continue
             elif event_type == "error": # 错误信息
                 st.error(f"后端错误:{data.get('content', '未知错误')}")
@@ -97,11 +75,9 @@ def handle_chat_turn(prompt):
             status_container.update(label="✅️ 生成完毕", state="complete", expanded=False)
         else:
             status_placeholder.empty()
-        if not final_response or not final_response.strip():
-            final_response = "未生成有效内容，请重试。"
-
-        # response_placeholder.markdown(sanitize_text(full_response)) # 显示最终文本
+        if not full_response or not full_response.strip():
+            full_response = "未生成有效内容，请重试。"
         # 最终回复记入历史
         st.session_state.message.append(
-            {"role":"assistant","content":final_response,"steps":tool_logs}
+            {"role":"assistant","content":full_response,"tools":tool_logs,"tasks":tasks_logs}
         )
