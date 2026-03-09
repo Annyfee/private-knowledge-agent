@@ -31,7 +31,12 @@ MAX_BATCH_CONCURRENCY = 3 # 批量并发上限
 @mcp.tool()
 async def web_search(query:str):
     """
-    快速搜索15个摘要文件，内含标题、链接和摘要
+    使用搜索关键词进行全网搜索，返回最多 15 条结果摘要。
+    参数:
+    - query: 必填，非空字符串。表示搜索关键词或搜索短句。
+    要求:
+    - 禁止省略 query
+    - 禁止传空字符串
     """
     try:
         logger.info(f'🔍 [Async] 正在搜索: {query}')
