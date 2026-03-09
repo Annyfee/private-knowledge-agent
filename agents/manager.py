@@ -1,4 +1,5 @@
 # 【前台】 分析话术，选择是否传递当前任务，还是判定用户在闲聊，不往后启动。
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -98,24 +99,26 @@ async def manager_node(state:ResearchAgent):
 
         你的核心职责是【意图识别】。请根据用户的输入，严格遵守以下判断逻辑：
 
-        ### 🛑 判定为【闲聊/回复】的情况 (直接回答，不要启动搜索):
+        ### 🛑 判定为【闲聊/回复】的情况:
         1. **闲聊/问候**: "你好", "你是谁", "天气不错"。
         2. **追问/纠正**: "不对", "我问的是这个", "停下", "在这个基础上再详细点"。
         3. **针对上一轮报告的提问**: "你觉得刚才的报告质量好吗", "为什么结果这么短"。
         4. **简单的知识问答**: "1+1等于几", "Python是什么" (不需要联网深挖的)。
         5. **无意义/模糊的短语**: "呃", "啊?", "测试", "123"。
+        - 此时mode应为chat
 
-        👉 **动作**: 返回:"chat"
-
-        ### 🚀 判定为【研究任务】的情况 (启动搜索集群):
+        ### 🚀 判定为【研究任务】的情况:
         只有当用户**明确要求进行深度调查、搜索最新信息、或分析复杂话题**时。
         例如: "帮我查一下DeepSeek的最新融资", "分析2026年美国对委内瑞拉政策", "调研AI Agent的技术栈"。
-
-        👉 **动作**: 返回:"research"
+        - 此时mode应为research
         
-        ### ⚠️ 约束:
-        - 你是一个路由决策者，不是对话者
-        - 只返回结构化决策，不要生成其他内容
+        
+        ### ⚠️ 要求:
+        请你只返回一个 JSON 对象，不要返回任何额外解释，不要加 Markdown 代码块。
+        返回格式必须严格为：
+        {{
+          "mode": "chat" 或 "research",
+        }}
         """
 
 
@@ -126,16 +129,16 @@ async def manager_node(state:ResearchAgent):
 
     try:
         # with_structured_output:强制LLM输出符合预定义格式的数据
-        decision = await llm.with_structured_output(RouteDecision, method="function_calling").ainvoke(safe_meg)
-        logger.info(f"🧭 [Manager] 意图识别结果: {decision.mode}")
-        if decision.reasoning:
-            logger.debug(f"   理由: {decision.reasoning}")
-        if decision.mode == "research":
-            # 研究模式:路由到 planner
-            return {"main_route":"planner"}
-        else:
+        # decision = await llm.with_structured_output(RouteDecision, method="function_calling").ainvoke(safe_meg)
+        response = await llm.ainvoke(safe_meg)
+        mode = json.loads(response.content)["mode"]
+        logger.info(f"🧭 [Manager] 意图识别结果: {mode}")
+        if mode == "chat":
             # 闲聊模式:路由到chat_node
             return {"main_route":"chat"}
+        if mode == "research":
+            # 研究模式:路由到 planner
+            return {"main_route":"planner"}
 
     except Exception as e:
         # 针对 400 风控错误的特殊处理
