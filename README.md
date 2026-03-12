@@ -72,16 +72,13 @@ flowchart LR
 
 ### 1) 研究过程（阶段流）
 
-![pic1.png](assets/pic1.png)
-
+![img1.png](img.png)
 ### 2) 工具调用过程（`web_search` / `batch_fetch`）
 
-![pic2.png](assets/pic2.png)
-
+![img2.png](img_1.png)
 ### 3) 最终报告输出
 
-![pic3.png](assets/pic3.png)
-
+![img3.png](img_2.png)
 ---
 
 ## 🧩 项目结构
