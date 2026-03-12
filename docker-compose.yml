@@ -6,6 +6,10 @@
 
 services:
   mcp-server:
+    environment:
+      - PYTHONPATH=/app #添加到搜索路径
+    env_file:
+      - .env
     build: .
     container_name: mcp_server
     command: ["python", "tools/mcp_server_search.py"]
@@ -27,7 +31,6 @@ services:
       - .:/app
       # 保护容器内的大文件/依赖 防止主机内容器为空覆盖
       - /app/.venv1
-      - /app/models
       - /app/chroma_db
     env_file:
       - .env

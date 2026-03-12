@@ -1,5 +1,4 @@
 .venv1/
-models/
 chroma_db/
 .env
 irrelevant_files/
