@@ -28,7 +28,7 @@ async def leader_node(state:Researcher):
         }
 
     # 2. 检查是否超限
-    if cur_retry >= 2:
+    if cur_retry >= 3:
         logger.error(f"{prefix} 🛑 尝试 {cur_retry} 次均失败，强制放弃。")
         return {
             "next_node": "end"  # 明确指令：结束

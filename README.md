@@ -23,7 +23,7 @@
 输入一个研究问题后，你可以实时看到：
 
 - 任务规划（Planner）
-- 工具调用（`web_search` / `batch_fetch`）
+- 工具调用（`web_search` / `get_page_content` / `batch_fetch`）
 - 报告写作过程（SSE 流式输出）
 - 最终结构化研究结论 + 来源引用
 
@@ -43,18 +43,16 @@
 
 ```mermaid
 flowchart TD
-    M[manager] -->|end_chat| END((END))
-    M --> P[planner]
+    M[manager] -->|chat| C[chat_node]
+    C --> END((END))
+    M -->|research| P[planner]
     P --> D[多Agent并发]
-
     D --> R1[researcher 1]
     D --> R2[researcher 2]
     D --> RN[researcher N]
-
     R1 --> W[writer]
     R2 --> W
     RN --> W
-
     W --> END
 ```
 
@@ -66,8 +64,6 @@ flowchart LR
     R -->|是| S
     R -->|否| E[强制结束]
 ```
-
-
 
 
 ---
@@ -114,15 +110,12 @@ research-agent/
 │   └── ui.py
 ├── tools/
 │   ├── mcp_server_search.py
-│   ├── mcp_manager.py
 │   ├── rag_store.py
 │   ├── registry.py
-│   ├── utils_event.py
 │   └── utils_message.py
 ├── graph.py
 ├── state.py
 ├── server.py
-├── main.py
 ├── config.py
 ├── requirements.txt
 ├── Dockerfile
@@ -157,9 +150,9 @@ BACKEND_URL = "http://<你的服务器IP>:8011"
 ```
 
 3) 本地运行前端（可选）
-如果你不是用 Streamlit Cloud，而是本地跑前端，就在 frontend/.env 配：
-```env
-BACKEND_URL=http://localhost
+docker运行后，直接运行前端命令即可
+```toml
+streamlit run app.py
 ```
 
 ---
@@ -170,7 +163,8 @@ BACKEND_URL=http://localhost
 - **Backend**: FastAPI + SSE
 - **Frontend**: Streamlit
 - **Tool Protocol**: MCP (fastmcp)
-- **Search/Crawl**: DDGS, Trafilatura
+- **Search**: Tavily (TAVILY_API_KEY)
+- **Crawl**: Jina Reader (https://r.jina.ai/)
 - **RAG**: ChromaDB + rerank model
 - **Runtime**: asyncio
 - **Deploy**: Docker / docker-compose
