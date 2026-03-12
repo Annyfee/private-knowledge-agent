@@ -1,11 +1,15 @@
+import re
+import httpx
 from mcp.server.fastmcp import FastMCP
-
 import asyncio
 from loguru import logger
-
-from ddgs import DDGS
-import trafilatura
 from mcp.server.transport_security import TransportSecuritySettings
+from config import TAVILY_API_KEY
+
+
+SINGLE_FETCH_TIMEOUT_SEC = 25 # 单URL超时
+BATCH_FETCH_TIMEOUT_SEC = 90 # 批量总超时
+MAX_BATCH_CONCURRENCY = 3 # 批量并发上限
 
 mcp = FastMCP(
     "SearchService",
@@ -21,15 +25,8 @@ mcp = FastMCP(
     )
 )
 
-
-SINGLE_FETCH_TIMEOUT_SEC = 25 # 单URL超时
-BATCH_FETCH_TIMEOUT_SEC = 90 # 批量总超时
-MAX_BATCH_CONCURRENCY = 3 # 批量并发上限
-
-
-
 @mcp.tool()
-async def web_search(query:str):
+async def web_search(query: str):
     """
     使用搜索关键词进行全网搜索，返回最多 15 条结果摘要。
     参数:
@@ -39,27 +36,40 @@ async def web_search(query:str):
     - 禁止传空字符串
     """
     try:
-        logger.info(f'🔍 [Async] 正在搜索: {query}')
-        # 确保时效性:最近一个月 | 后续更新可以自由选择需要的时间段
+        logger.info(f'🔍 [Async/Tavily] 正在搜索: {query}')
+        api_key = TAVILY_API_KEY
+        if not api_key:
+            return "Error: 搜索服务未配置 TAVILY_API_KEY 环境变量"
 
-        # 【核心逻辑】使用同步的 DDGS，但用 to_thread 包装成异步
-        # 理由：DDGS 官方库变动频繁，AsyncDDGS 可能不存在，而 to_thread 是 Python 标准库，永远稳定。
-        def _sync_search():
-            # max_results 建议 10-15
-            # timelimit="y" (过去一年)
-            return list(DDGS().text(query, max_results=15, timelimit="y"))
+        # 并发爬取
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": api_key,
+                    "query": query,
+                    "search_depth": "advanced", # 深度爬取
+                    "max_results": 15
+                },
+                timeout=SINGLE_FETCH_TIMEOUT_SEC
+            )
+            response.raise_for_status()
+            data = response.json()
 
-        # 扔到线程池跑，不阻塞主线程
-        results = await asyncio.to_thread(_sync_search)
+            results = data.get("results", [])
+            if not results:
+                return "未找到相关结果，请尝试更换关键词。"
 
-        if not results:
-            return "未找到相关结果，请尝试更换关键词。"
+            search_results = []
+            for i, r in enumerate(results):
+                content = f"结果 [{i}]\n标题: {r.get('title')}\n链接: {r.get('url')}\n摘要: {r.get('content')}\n"
+                search_results.append(content)
 
-        search_results = []
-        for i,r in enumerate(results):
-            content = f"结果 [{i}]\n标题: {r['title']}\n链接: {r['href']}\n摘要: {r['body']}\n"
-            search_results.append(content)
-        return "\n---\n".join(search_results)
+            return "\n---\n".join(search_results)
+
+    except httpx.TimeoutException:
+        logger.error(f"搜索请求超时: {query}")
+        return '搜索服务暂时不可用: 请求超时'
     except Exception as e:
         logger.error(f"搜索服务出错: {e}")
         return f'搜索服务暂时不可用: {str(e)}'
@@ -70,24 +80,31 @@ async def get_page_content(url: str):
     """
     获取单个url里的全文信息
     """
-    logger.info(f'⚡ [Async] 正在抓取: {url}')
-
-    def _fetch():
-        downloaded = trafilatura.fetch_url(url)
-        if not downloaded:
-            return "Error: 无法访问该页面"
-        result = trafilatura.extract(downloaded)
-        return result or "Error: 无法提取正文内容"
+    logger.info(f'⚡ [Async/Jina] 正在抓取: {url}')
 
     try:
-        # 单URL超时兜底
-        return await asyncio.wait_for(
-            asyncio.to_thread(_fetch),
-            timeout=SINGLE_FETCH_TIMEOUT_SEC
-        )
-    except asyncio.TimeoutError:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://r.jina.ai/{url}",
+                timeout=SINGLE_FETCH_TIMEOUT_SEC
+            )
+            response.raise_for_status()
+            raw_response = response.text
+
+            if not raw_response:
+                return "Error: 提取正文内容为空"
+
+            # 剔除 Markdown 中的超长 Base64 图片数据或无效的图片占位符
+            dehydrated_text = re.sub(r'!\[.*?\]\(data:image/.*?\)', '[图片已脱水]', raw_response)
+            dehydrated_text = re.sub(r'!\[.*?\]\([^)]+\.(jpg|png|gif|svg)\)', '[图片已移除]', dehydrated_text)
+
+            return dehydrated_text
+
+    except httpx.TimeoutException:
         logger.warning(f"⏰ 单URL抓取超时: {url}")
         return f"Error: 抓取超时（>{SINGLE_FETCH_TIMEOUT_SEC}s）: {url}"
+    except httpx.HTTPStatusError as e:
+        return f"Error: 目标网站拒绝访问或不存在 (HTTP {e.response.status_code})"
     except Exception as e:
         return f"Error: 抓取时发生未知错误:{str(e)}"
 
@@ -100,23 +117,21 @@ async def batch_fetch(urls: list[str]):
     """
     logger.info(f'正在批量获取{len(urls)}个URL的全文信息...')
     sem = asyncio.Semaphore(MAX_BATCH_CONCURRENCY)
-    async def fetch_one(url:str):
+
+    async def fetch_one(url: str):
         async with sem:
-            try:
-                return await asyncio.wait_for(
-                    get_page_content(url),
-                    timeout=SINGLE_FETCH_TIMEOUT_SEC
-                )
-            except Exception as e:
-                return f"Error: {url} 抓取失败: {e}"
+            # 复用异步 get_page_content
+            return await get_page_content(url)
     try:
         results = await asyncio.wait_for(
             asyncio.gather(*(fetch_one(url) for url in urls)),
             timeout=BATCH_FETCH_TIMEOUT_SEC
         )
     except asyncio.TimeoutError:
-        return "Error: 批量抓取超时，请减少URL数量后重试。"
+        return "Error: 批量抓取总时长超时，请减少URL数量后重试。"
+
     return "\n\n=== 文章分隔线 ===\n\n".join(results)
+
 
 if __name__ == '__main__':
     mcp.run("streamable-http")

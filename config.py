@@ -11,6 +11,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY")
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 
 # 3.加载embedding模式
