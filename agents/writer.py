@@ -108,7 +108,6 @@ async def writer_node(state:ResearchAgent):
         logger.info(f"🧹 [Writer] 任务完成，清理 Session: {session_id}")
 
         return {
-            "final_answer":response.content,
             "messages":[response]
         }
     # AI的api可能会拒绝生成内容，需要做防护
@@ -120,20 +119,17 @@ async def writer_node(state:ResearchAgent):
             # 告知风控
             msg = "⚠️ 抱歉，由于内容安全策略，我无法生成关于该主题的详细报告。请尝试更换关键词。"
             return {
-                "final_answer":msg,
                 "messages":[AIMessage(content=msg)]
             }
         else:
             logger.error(f"❌ API 请求错误: {e}")
             msg = f"❌ API 请求错误: {e}"
             return {
-                "final_answer":msg,
                 "messages": [AIMessage(content=msg)]
             }
     except Exception as e:
         logger.error(f"❌ 未知错误: {e}")
         msg = f"⚠️ 系统运行异常，请检查日志。错误详情: {str(e)}"
         return {
-            "final_answer":msg,
             "messages": [AIMessage(content=msg)]
         }
