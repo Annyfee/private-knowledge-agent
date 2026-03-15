@@ -123,7 +123,8 @@ async def surfer_node(state:Researcher,tools=None):
     except openai.BadRequestError as e:
         # 捕获 llm 的内容风控错误
         err_dict = e.body or {}
-        if "Content Exists Risk" in str(err_dict):
+        err_str = str(err_dict)
+        if "Content Exists Risk" in str(err_dict) or "DataInspectionFailed" in err_str:
             logger.error(f"🚫 {prefix} 触发内容风控，强制跳过当前轮次。")
             # 返回一个由 Human 构造的 System 提示，假装这一步失败了，让 Leader 决定是否重试
             return {"messages": [AIMessage(content="⚠️ [安全拦截] 该话题涉及敏感内容，无法继续执行检索。")]}

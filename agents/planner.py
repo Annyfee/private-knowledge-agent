@@ -70,12 +70,10 @@ async def planner_node(state:ResearchAgent):
             raise ValueError("任务为空或不是列表")
         return {
             "tasks": tasks,
-            # "main_route": "surfer"
         }
     except Exception as e:
         logger.warning(f"⚠️ [Planner] 解析失败，回滚到单任务模式: {e}")
         # 保底:把用户原话当做任务
         return {
             "tasks":[state["messages"][-1].content]
-            # "main_route":"surfer"
         }
