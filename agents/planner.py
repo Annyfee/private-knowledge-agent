@@ -8,9 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from state import ResearchAgent
 from config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
-from tools.utils_message import clean_msg_for_deepseek
-
-
+from tools.utils_message import clean_msg_for_deepseek, slice_messages
 
 llm = ChatOpenAI(
     model=OPENAI_MODEL,
@@ -54,10 +52,10 @@ async def planner_node(state:ResearchAgent):
     不要输出任何多余的解释或废话，只输出JSON。
     """
 
-    # 选择最近5条相关数据返回
+    # 选择最近8条相关数据返回
     messages = [SystemMessage(content=sys_prompt)] + state["messages"][-8:]
-
-    safe_msg = clean_msg_for_deepseek(messages)
+    slice_message = slice_messages(messages)
+    safe_msg = clean_msg_for_deepseek(slice_message)
 
     # 保底确定返回数据格式正确
     try:

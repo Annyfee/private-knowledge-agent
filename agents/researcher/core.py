@@ -14,7 +14,6 @@ async def core_node(state:Researcher):
     """
     针对获取的数据，将其整理并入库，并返回给LLM已入库的信息
     """
-    # cur_task_idx = state["cur_task_idx"]
 
     task_idx = state["task_idx"]
     messages = state["messages"]

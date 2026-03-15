@@ -84,6 +84,7 @@ async def surfer_node(state:Researcher,tools=None):
         # 找最后一对 AI+Tool 消息，成对携带
         last_pair_start = -1
         for i, msg in enumerate(reversed(state["messages"])):
+            # 找到tool_calls，就把所有前面的返回(会包括ToolMessage)
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 last_pair_start = len(state["messages"]) - 1 - i
                 break

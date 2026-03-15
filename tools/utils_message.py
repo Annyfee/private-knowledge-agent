@@ -22,3 +22,17 @@ def clean_msg_for_deepseek(messages):
         else:
             cleaned.append(msg)
     return cleaned
+
+
+def slice_messages(messages):
+    """
+    完全过滤工具相关信息（AI 的 tool_calls + ToolMessage）
+    用于 chat/planner 等不需要工具信息的场景
+
+    (信息列表中的ToolMessage与tool_call_id必须连在一块，单独摘一个会报错--比如直接切state["messages"][-8]。所以要么直接去掉工具信息(本函数)，要么完整保留工具调用不切片)
+    """
+    return [
+        msg for msg in messages
+        if not isinstance(msg, ToolMessage)
+        and not (hasattr(msg, 'tool_calls') and msg.tool_calls)
+    ]

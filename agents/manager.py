@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from state import ResearchAgent
 from config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
-from tools.utils_message import clean_msg_for_deepseek
+from tools.utils_message import clean_msg_for_deepseek,slice_messages
 
 
 
@@ -70,7 +70,8 @@ async def chat_node(state:ResearchAgent):
     当前时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}
     """
     messages = [SystemMessage(content=sys_prompt)] + state['messages'][-8:]
-    safe_msg = clean_msg_for_deepseek(messages)
+    slice_message = slice_messages(messages)
+    safe_msg = clean_msg_for_deepseek(slice_message)
     try:
         response = await llm.ainvoke(safe_msg)
         logger.info("☕ [Chat] 闲聊回复已生成")
