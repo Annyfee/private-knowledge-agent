@@ -27,10 +27,11 @@ async def manager_node(state: ResearchAgent):
 
     try:
         response = await get_llm(temperature=0.0).ainvoke(messages)
-        text = response.content.strip().lower()
+        # 增加空值兜底,避免 response.content 为 None 时抛异常
+        text = (response.content or "").strip().lower()
 
-        # 在返回文本里直接找关键词，不依赖任何格式
-        if text == "chat":
+        # 宽松匹配，兼容 "chat."、"chat\n" 等输出，减少误路由
+        if text.startswith("chat") or ("chat" in text and "research" not in text):
             intent = "chat"
         else:
             intent = "research"
