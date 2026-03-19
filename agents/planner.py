@@ -1,5 +1,5 @@
 import json
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from loguru import logger
 from state import ResearchAgent
 from tools.utils_message import get_llm
@@ -10,6 +10,9 @@ SYS_PROMPT = """
     
     要求格式:
     {"tasks": ["子任务1", "子任务2"]}
+    
+    约束:
+    只允许输出JSON，严禁输出任何其他非JSON内容!
     """
 
 FALLBACK = ["检索与用户需求相关的核心数据和策略信息"]
@@ -17,7 +20,8 @@ FALLBACK = ["检索与用户需求相关的核心数据和策略信息"]
 async def planner_node(state: ResearchAgent):
     logger.info("🎯 [Planner] 生成检索计划...")
     try:
-        response = await get_llm(0.1).ainvoke([SystemMessage(content=SYS_PROMPT), *state["messages"][-4:]])
+        human_meg = [m for m in state["messages"] if isinstance(m, HumanMessage)][-2:]
+        response = await get_llm(0.1).ainvoke([SystemMessage(content=SYS_PROMPT),*human_meg])
         tasks = json.loads(response.content)["tasks"]
         # 校验必须是非空列表，且每个元素都是字符串
         if isinstance(tasks, list) and tasks and all(isinstance(t, str) for t in tasks):
