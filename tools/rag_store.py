@@ -1,6 +1,3 @@
-import os
-import shutil
-
 # 导入 Flashrank (Reranker 始终用轻量级本地版)
 from flashrank import Ranker, RerankRequest
 # LangChain 组件
@@ -25,12 +22,12 @@ class RAGStore:
             self.embedding = HuggingFaceEmbeddings(
                 model_name=EMBEDDING_MODEL_NAME,
                 model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True} # 输出的向量做归一化，方便后续做相似度搜索
+                encode_kwargs={'normalize_embeddings': True}# 输出的向量做归一化，方便后续做相似度搜索
             )
         else:
             # 【云端模式】调用 SiliconFlow API (省内存，极速)
             from langchain_openai import OpenAIEmbeddings
-            if not EMBEDDING_API_KEY.startswith("sk-"):
+            if not EMBEDDING_API_KEY or not EMBEDDING_API_KEY.startswith("sk-"):
                 logger.error("❌ 未配置 EMBEDDING_API_KEY，无法使用云端模式！")
                 raise ValueError("API Key Missing")
 
@@ -39,8 +36,9 @@ class RAGStore:
                 model=EMBEDDING_MODEL_NAME,
                 openai_api_key=EMBEDDING_API_KEY,
                 openai_api_base=EMBEDDING_BASE_URL,
-                check_embedding_ctx_length=False # 跳过长度检查，避免报错
+                check_embedding_ctx_length=False
             )
+
         # 切分器
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=1200,
@@ -55,8 +53,8 @@ class RAGStore:
             # 选择用该模型来做embedding的工作
             embedding_function=self.embedding
         )
+
         # Reranker:精排序 (Flashrank:为了适应格式，在精排序前后要转换协议)
-        # Flashrank 只有 100MB，4G 服务器完全跑得动，为了逻辑简单，保持本地运行
         self.reranker = Ranker(
             model_name="ms-marco-MiniLM-L-12-v2",
             cache_dir="./models"
@@ -65,40 +63,39 @@ class RAGStore:
         logger.info("✅ [Init] RAG 系统就绪")
 
     # RAG - 离线模块(加载与切块/向量化/存入向量数据库)
-    def add_documents(self, text_content: str, source_url: str = "",session_id : str = None):
-        """
-        存入向量数据库 (自动分批处理)
-        text_content:需要存储的原始文本内容
-        source_url:文本的来源标识，用于后续检索时展示出处 (方便AI标识精确来源，比如url)
-        """
+    def add_documents(self, text_content: str, source_url: str = "", session_id: str = None, mtime: float = 0.0):
+        """存入向量数据库"""
         if not text_content or len(text_content) < 50:
             logger.warning("⚠️ 内容过短，跳过入库")
             return False
 
         # 封装 Document(Document是langchain固定接收的对象格式) metadata则指明具体身份
         # 注:后续我们会不断沿用这个数据结构，可以理解为数据库反复读写查询，但其参数没变
-        raw_doc = Document(page_content=text_content, metadata={"source": source_url,"session_id":session_id})
+        raw_doc = Document(page_content=text_content, metadata={"source_url": source_url, "session_id": session_id})
         # 切片
         chunks = self.splitter.split_documents([raw_doc])
 
+        for chunk in chunks:
+            chunk.metadata = {"source_url": source_url, "session_id": session_id, "mtime": mtime}
+
         # --- 分批入库 ---
-        # 硅基流动限制单次 batch <= 64，我们设为 50 比较安全
+        # 某些API平台限制单次 batch，我们设为 50 比较安全
         batch_size = 50
         total_chunks = len(chunks)
 
         for i in range(0, total_chunks, batch_size):
             batch = chunks[i: i + batch_size]
+            self.vector_store.add_documents(batch)
             # 调用向量库内置方法:将这一批次(50个)文本片段发送给 Embedding模型进行向量化，再将生成的向量连同原始文本、元数据一同持久化存储到本地Chroma数据库中
             # 简单讲，此处囊括了 文本向量化+存入向量数据库 两步
             # 注意:在此步前，我们的batch一直都还是非向量形态
-            self.vector_store.add_documents(batch)
             logger.info(f"💾 [Store] 分批入库: {len(batch)} 个片段 ({i + len(batch)}/{total_chunks})")
 
         logger.info(f"✅ [Store] 全部入库完成 (共 {total_chunks} 个片段 | 来源: {source_url})")
         return True
 
     # RAG - 在线模块(粗排/精排/过滤)
-    def query(self, question: str,session_id:str, k_retrieve=50, k_final=6, score_threshold=0.6):
+    def query(self, question: str, session_id: str, k_retrieve=50, k_final=6, score_threshold=0.7):
         """
         检索流程: 向量粗排 -> Flashrank 精排
         粗排 - 计算数学距离（长得像就行）；
@@ -109,32 +106,31 @@ class RAGStore:
         k_final:精排个数;
         score_threshold:得分阈值/低于此抛弃
         """
-        # Phase 1: 粗排
         logger.info(f"🔍 [Search] 向量检索 Top-{k_retrieve}...")
-        # 这个doc与前面的Document(xx)指向同一个参数(page_content,metadata)封装，是因为二者(Chroma/langchain-langchain_chroma)已经互相集成好,所以可以直接调用
-        docs = self.vector_store.similarity_search(question, k=k_retrieve,filter={"session_id":session_id}) # filter作为检索条件
+
+        docs = self.vector_store.similarity_search(question, k=k_retrieve, filter={"session_id": session_id})
 
         if not docs:
             logger.warning("⚠️ 未找到相关文档")
             return []
 
-        # Phase 2: 精排
+        # 精排
         logger.info(f"⚡️ [Rerank] Flashrank 重排序...")
         # 把数据封装成FlashRank接受的格式(doc.page_content是原始文本内容;doc.metadata是档案来源：比如你可以指定为last_msg.tool_call_id)
         # FlashRank是针对精排序的。所以这里在数据传过去与传回来都需要调整格式。
         passages = []
-        for i,doc in enumerate(docs):
-            passages.append({"id": str(i), "text": doc.page_content, "meta": doc.metadata}) # 调用add_documents里的参数
+        for i, doc in enumerate(docs):
+            passages.append({"id": str(i), "text": doc.page_content, "meta": doc.metadata})
 
         # 把LangChain的Document列表转换为FlashRank理解的passages列表
         rerank_request = RerankRequest(query=question, passages=passages)
         # 将数据喂给精排模型，并返回一个打分列表
         results = self.reranker.rerank(rerank_request)
 
-        # Phase 3: 过滤
+        # 过滤
         final_docs = []
         score = []
-        # 必须得分超过0.3才能返回
+        # 必须得分超过对应阈值才能返回
         for res in results:
             if res['score'] >= score_threshold:
                 # 将FlashRank返回的py字典转化为LangChain接受的Document对象
@@ -145,27 +141,29 @@ class RAGStore:
             if len(final_docs) >= k_final:
                 break
 
-        logger.info(f"✅ [Result] 返回 {len(final_docs)} 个高分结果 | 打分结果:{score}")
+        # 兜底机制：无结果达到阈值则返回 top3
+        if not final_docs and results:
+            logger.warning(f"⚠️ [Result] 无结果达到阈值 ({score_threshold})，返回 top3 兜底数据")
+            for res in results[:3]:
+                doc = Document(page_content=res['text'], metadata=res['meta'])
+                doc.metadata['rerank_score'] = res['score']
+                score.append(res['score'])
+                final_docs.append(doc)
+
+        logger.info(f"✅ [Result] 返回 {len(final_docs)} 个结果 | 打分结果:{score}")
         return final_docs
 
-    def clear_session(self,session_id):
-        """
-        任务完成时，清空该用户的RAG数据（临时RAG）
-        """
+    def clear_session(self, session_id: str):
+        """任务完成时，清空该用户的RAG数据"""
         try:
-            self.vector_store.delete(where={"session_id":session_id}) # 选中该session_id对应的数据并删除
+            self.vector_store._collection.delete(where={"session_id": session_id})
             logger.success(f"🧹 [Clear] 已清空用户({session_id}) 的临时 RAG 数据")
         except Exception as e:
-            logger.error(f"❌ 清库失败: {e}")
+            logger.error(f"❌ 清库失败 (可能库为空): {e}")
 
-
-    # RAG检索返回逻辑
-    def query_formatted(self,query:str,session_id:str):
-        """
-        直接返回格式化好的字符串，给Tool和Writer用
-        """
-
-        results = self.query(query,session_id)
+    def query_formatted(self, query: str, session_id: str):
+        """直接返回格式化好的字符串，给Tool和Writer用"""
+        results = self.query(query, session_id)
 
         if not results:
             return "知识库中未找到相关内容。"
@@ -173,32 +171,34 @@ class RAGStore:
         # 格式化返回结果
         formatted_res = []
         for doc in results:
-            source = doc.metadata.get('source', 'unknown')
+            source = doc.metadata.get('source_url', 'unknown')
             score = doc.metadata.get('rerank_score', 0)
             formatted_res.append(f"[来源: {source} | 置信度: {score:.2f}]\n{doc.page_content}")
 
         return "\n\n---\n\n".join(formatted_res)
 
-# --- 测试代码 ---
-if __name__ == "__main__":
-    # 清理旧库测试
-    if os.path.exists("./chroma_db"):
-        shutil.rmtree("./chroma_db")
+    def get_indexed_file_mtimes(self, session_id: str) -> dict:
+        """获取当前知识库中已索引的文件及其最后修改时间"""
+        try:
+            results = self.vector_store.get(where={"session_id": session_id}, include=["metadatas"])
+            file_mtimes = {}
+            if results and results.get("metadatas"):
+                for meta in results["metadatas"]:
+                    if meta and "source_url" in meta:
+                        url = meta["source_url"]
+                        mtime = meta.get("mtime", 0.0)
+                        file_mtimes[url] = mtime
+            return file_mtimes
+        except Exception as e:
+            logger.error(f"获取已索引文件失败: {e}")
+            return {}
 
-    rag = RAGStore()
-
-    # 模拟入库
-    text = "DeepSeek-V3 是一款强大的模型，API 价格非常便宜。SiliconFlow 提供了极速的推理服务。"
-    import uuid
-    sid = str(uuid.uuid4())
-    rag.add_documents(text, "test_source",session_id=sid)
-
-    # 模拟检索
-
-    res = rag.query("DeepSeek 怎么样？",session_id=sid)
-    print(res)
-    rag.clear_session(session_id=sid)
-    for r in res:
-        print('r:::',r)
-        print('r.metadata:::',r.metadata)
-        print(f"得分: {r.metadata['rerank_score']:.3f} | 内容: {r.page_content}")
+    def delete_file(self, source_url: str, session_id: str):
+        """从知识库中精确删除某个特定文件的所有切片"""
+        try:
+            self.vector_store._collection.delete(
+                where={"$and": [{"source_url": source_url}, {"session_id": session_id}]}
+            )
+            logger.info(f"🗑️ [Store] 已从向量库精准移除失效文件: {source_url}")
+        except Exception as e:
+            logger.error(f"❌ [Store] 移除失效文件失败 {source_url}: {e}")
