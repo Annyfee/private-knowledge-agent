@@ -19,7 +19,8 @@ async def planner_node(state: ResearchAgent):
     try:
         response = await get_llm(0.1).ainvoke([SystemMessage(content=SYS_PROMPT), *state["messages"][-4:]])
         tasks = json.loads(response.content)["tasks"]
-        if tasks:
+        # 校验必须是非空列表，且每个元素都是字符串
+        if isinstance(tasks, list) and tasks and all(isinstance(t, str) for t in tasks):
             logger.success(f"✅ [Planner] {tasks}")
             return {"tasks": tasks, "research_data": [None]}
     except Exception as e:
