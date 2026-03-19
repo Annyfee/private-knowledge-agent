@@ -8,3 +8,6 @@ db/
 logs/
 __pycache__/
 *.py[cod]
+generate_integrated_file.py
+integrated_research_agent.txt
+data/
