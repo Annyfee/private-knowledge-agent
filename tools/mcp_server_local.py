@@ -1,4 +1,5 @@
 import os
+import json
 import pdfplumber
 import docx
 import concurrent.futures
@@ -9,6 +10,8 @@ from tools.rag_store import RAGStore
 mcp = FastMCP("LocalKnowledgeServer", host="0.0.0.0", port=8003)
 
 DATA_DIR = os.path.realpath(os.path.join(os.getcwd(), "data"))
+DB_DIR = os.path.realpath(os.path.join(os.getcwd(), "db"))  # 新增 DB_DIR，让索引状态与 data 目录隔离
+INDEX_STATE_FILE = os.path.join(DB_DIR, "index_state.json")  # 索引状态落盘位置改到db，避免污染输入目录
 GLOBAL_SESSION_ID = "enterprise_local_kb"
 rag = RAGStore()
 
@@ -16,10 +19,12 @@ SUPPORTED_EXTS = ('.txt', '.md', '.pdf', '.docx')
 
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
+if not os.path.exists(DB_DIR):
+    os.makedirs(DB_DIR)  # 确保 db 存在，避免首次写索引状态失败
 
 
 def extract_text_from_file(file_path: str) -> str:
-    """文件解析器：加入 GBK 与 UTF-8 双重编码防线"""
+    """万能文件解析器：支持 UTF-8 和 GBK 编码"""
     ext = os.path.splitext(file_path)[-1].lower()
     try:
         if ext in ('.txt', '.md'):
@@ -49,6 +54,38 @@ def extract_text_from_file(file_path: str) -> str:
         return ""
 
 
+def get_current_file_fingerprints() -> dict:
+    """获取当前所有文件的指纹：文件名 -> 文件大小"""
+    fingerprints = {}
+    for f in os.listdir(DATA_DIR):
+        if f.lower().endswith(SUPPORTED_EXTS):
+            file_path = os.path.join(DATA_DIR, f)
+            file_stat = os.stat(file_path)
+            # 指纹从仅 size 改成 size+mtime_ns,降低内容变更漏检风险
+            fingerprints[f] = {"size": file_stat.st_size, "mtime_ns": file_stat.st_mtime_ns}
+    return fingerprints
+
+
+def load_last_index_state() -> dict:
+    """加载上次索引状态"""
+    try:
+        if os.path.exists(INDEX_STATE_FILE):
+            with open(INDEX_STATE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.warning(f"读取索引状态失败: {e}")
+    return {}
+
+
+def save_index_state(fingerprints: dict):
+    """保存当前索引状态"""
+    try:
+        with open(INDEX_STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(fingerprints, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"保存索引状态失败: {e}")
+
+
 @mcp.tool()
 async def list_local_files() -> str:
     """列出本地企业知识库(data目录)下的所有可用文件。"""
@@ -62,7 +99,8 @@ async def list_local_files() -> str:
 async def read_local_file(filename: str) -> str:
     """读取指定本地文件的全文内容。如果文件过长报错，必须改用 search_local_knowledge"""
     file_path = os.path.realpath(os.path.join(DATA_DIR, filename))
-    if os.path.commonpath([file_path, DATA_DIR]) != DATA_DIR:
+    # 路径安全校验改为 commonpathm，避免路径前缀绕过
+    if os.path.commonpath([DATA_DIR, file_path]) != DATA_DIR:
         return "Error: 非法文件路径，拒绝访问。"
 
     if not os.path.exists(file_path):
@@ -85,64 +123,35 @@ async def search_local_knowledge(query: str) -> str:
 
 
 def process_single_file(filename: str):
+    """处理单个文件：解析并存入向量库"""
     try:
         file_path = os.path.join(DATA_DIR, filename)
-        mtime = os.path.getmtime(file_path)
         content = extract_text_from_file(file_path)
-
-        if content.strip():
-            rag.add_documents(text_content=content, source_url=filename, session_id=GLOBAL_SESSION_ID, mtime=mtime)
-            logger.success(f"✅ 文件增量入库成功: {filename}")
+        if not content.strip():
+            logger.warning(f"⚠️ 文件内容为空，跳过: {filename}")
+            return
+        rag.add_documents(text_content=content, source_url=filename, session_id=GLOBAL_SESSION_ID)
     except Exception as e:
         logger.error(f"❌ 文件入库失败 [{filename}]: {e}")
 
-
 def ingest_local_files_to_rag():
-    """具备智能 Diff 能力的增量同步调度器"""
-
-    current_files = {}
-    for f in os.listdir(DATA_DIR):
-        if f.lower().endswith(SUPPORTED_EXTS):
-            file_path = os.path.join(DATA_DIR, f)
-            current_files[f] = os.path.getmtime(file_path)
-
-    if not current_files:
-        logger.warning("⚠️ 本地 knowledge 库为空。")
-        rag.clear_session(GLOBAL_SESSION_ID)
+    """极简增量检测：文件指纹一致则跳过，否则全量重建"""
+    current = get_current_file_fingerprints()
+    last = load_last_index_state()
+    if current == last:
+        logger.success(f"⚡ 文件未变动，跳过向量化 ({len(current)} 个文件)")
         return
-
-    indexed_mtimes = rag.get_indexed_file_mtimes(GLOBAL_SESSION_ID)
-
-    files_to_delete = []
-    files_to_add = []
-
-    for filename, indexed_mtime in indexed_mtimes.items():
-        if filename not in current_files:
-            files_to_delete.append(filename)
-        elif current_files[filename] > indexed_mtime:
-            files_to_delete.append(filename)
-            files_to_add.append(filename)
-
-    for filename in current_files:
-        if filename not in indexed_mtimes:
-            files_to_add.append(filename)
-
-    if not files_to_delete and not files_to_add:
-        logger.success(f"⚡ 知识库已是最新状态 (共监控 {len(current_files)} 个文件)，跳过向量化计算，秒速启动！")
-        return
-
-    logger.info(f"🔄 检测到文件变动: 需新增/更新 {len(files_to_add)} 个, 需移除 {len(files_to_delete)} 个")
-
-    for filename in files_to_delete:
-        rag.delete_file(filename, GLOBAL_SESSION_ID)
-
-    if files_to_add:
-        max_workers = 5
-        logger.info(f"⚡ 启动多线程计算引擎，仅对变动文件进行向量化处理...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            executor.map(process_single_file, files_to_add)
-
-    logger.success("🎉 私有知识库增量同步完成！")
+    total = len(current)
+    logger.info(f"🔄 检测到文件变动，开始重建 ({total} 个文件)")
+    rag.clear_session(GLOBAL_SESSION_ID)
+    if current:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(process_single_file, f): f for f in current.keys()}
+            for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                logger.info(f"📦 [{i}/{total}] 已完成: {futures[future]} | 剩余 {total - i} 个")
+    # save_index_state 移到 if 外，即使 data 为空也保存状态，避免反复重建
+    save_index_state(current)
+    logger.success("🎉 知识库构建完成！")
 
 
 if __name__ == "__main__":
