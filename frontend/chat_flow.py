@@ -74,7 +74,7 @@ def handle_chat_turn(prompt):
 
         if not is_error:
             if is_research:
-                status_container.update(label="✅️ 洞察报告生成完毕", state="complete", expanded=False)
+                status_container.update(label="✅️ 分析报告生成完毕", state="complete", expanded=False)
             else:
                 status_placeholder.empty()
 

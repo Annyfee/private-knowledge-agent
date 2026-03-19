@@ -3,7 +3,7 @@ import streamlit as st
 
 def setup_page():
     st.set_page_config(
-        page_title="私域知识洞察引擎",
+        page_title="本地知识库 Agent",
         page_icon="🗂️",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -29,7 +29,7 @@ def setup_page():
 def render_sidebar(status):
     new_chat_clicked = False
     with st.sidebar:
-        st.header("🗂️ 知识控制台")
+        st.header("🗂️ 知识库控制台")
         st.caption(f"Session ID:{st.session_state.session_id}")
 
         # 【新增】手动刷新状态按钮，解决启动慢半拍的问题
@@ -58,16 +58,16 @@ def render_sidebar(status):
 
         st.info("""
         **系统特性**：
-        - 🔒 **隐私安全**：100% 本地环境断网运行
-        - 📚 **私域底座**：自动解析 `data/` 目录文档
-        - 🧠 **双核驱动**：支持全文精读与 RAG 语义检索
+        - 📃 **本地部署**：支持本地环境断网运行
+        - 📚 **多格式文档**：自动解析 `data/` 目录文档
+        - 🧠 **RAG语义检索**：粗排+精排
         """)
         return new_chat_clicked
 
 
 def render_header():
     st.title("🕵️ Private Knowledge Agent")
-    st.caption("基于 LangGraph 架构 | 企业级私域数据洞察引擎")
+    st.caption("基于 LangGraph 架构 | 本地私有化部署")
 
 
 def render_history():

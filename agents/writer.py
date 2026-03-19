@@ -24,7 +24,7 @@ async def writer_node(state: ResearchAgent):
     1. 必须基于上述提取的数据进行回答，绝不允许编造任何外部数据。
     2. 向用户建议可以加入哪些资料以丰富最终报告。
     3. 使用清晰的 Markdown 结构（标题、加粗、无序列表）排版。
-
+    4. 所有引用来源应在文末注明。
     """
     last_human = [m for m in state["messages"] if isinstance(m,HumanMessage)][-1:]
     messages = [SystemMessage(content=sys_prompt),*last_human] # 只给一个用户提问

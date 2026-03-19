@@ -22,6 +22,6 @@ if new_chat_clicked:
 render_header()
 render_history()
 
-prompt = st.chat_input("请输入您想从本地资料中洞察什么内容...")
+prompt = st.chat_input("请输入基于本地数据库的要求")
 if prompt:
     handle_chat_turn(prompt)
