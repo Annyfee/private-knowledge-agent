@@ -30,7 +30,7 @@ async def manager_node(state: ResearchAgent):
         text = response.content.strip().lower()
 
         # 在返回文本里直接找关键词，不依赖任何格式
-        if "chat" in text:
+        if text == "chat":
             intent = "chat"
         else:
             intent = "research"

@@ -1,5 +1,5 @@
 from loguru import logger
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from state import ResearchAgent
 from tools.utils_message import get_llm
 
@@ -35,4 +35,4 @@ async def writer_node(state: ResearchAgent):
     except Exception as e:
         logger.error(f"❌ [Writer] 撰写失败: {e}")
         msg = f"⚠️ 系统生成报告时发生异常，请重试。错误信息: {str(e)}"
-        return {"final_answer": msg}
+        return {"final_answer": msg,"messages":[AIMessage(content=msg)]}

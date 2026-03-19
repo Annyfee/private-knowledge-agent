@@ -62,7 +62,7 @@ async def list_local_files() -> str:
 async def read_local_file(filename: str) -> str:
     """读取指定本地文件的全文内容。如果文件过长报错，必须改用 search_local_knowledge"""
     file_path = os.path.realpath(os.path.join(DATA_DIR, filename))
-    if not file_path.startswith(DATA_DIR):
+    if os.path.commonpath([file_path, DATA_DIR]) != DATA_DIR:
         return "Error: 非法文件路径，拒绝访问。"
 
     if not os.path.exists(file_path):
