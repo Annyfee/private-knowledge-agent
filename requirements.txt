@@ -1,3 +1,5 @@
+python-docx
+pdfplumber
 httpx==0.28.1
 fastapi==0.128.4
 FlashRank==0.2.10
@@ -16,4 +18,4 @@ Requests==2.32.5
 starlette==0.52.1
 uvicorn==0.40.0
 streamlit==1.54.0
-langgraph.checkpoint.sqlite
+langgraph-checkpoint-sqlite
