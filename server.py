@@ -10,7 +10,7 @@ from config import LANGCHAIN_API_KEY
 
 if LANGCHAIN_API_KEY:
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    os.environ["LANGCHAIN_PROJECT"] = "research-agent"
+    os.environ["LANGCHAIN_PROJECT"] = "private-knowledge-agent"
     os.environ["LANGCHAIN_API_KEY"] = LANGCHAIN_API_KEY
 else:
     logger.warning("⚠️ 未配置 LANGCHAIN_API_KEY，LangSmith 追踪已禁用")
