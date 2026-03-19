@@ -1,25 +1,26 @@
-from typing import Annotated
-
-from langgraph.graph import MessagesState
-
-
-# 返回首个状态(后续返回状态不做处理)
-def reduce_share_id(left,right):
-    if left:
-        return left
-    return right
+import operator
+from typing import Annotated, Sequence, TypedDict
+from langchain_core.messages import BaseMessage
 
 
-# 定义类属性是 class xx(yy) 定义def才是 def xx(state:yy)
-# class后面跟括号:我是谁的子类(继承
-# def后面跟括号:我需要什么数据来干活(参数与类型提示
+# 原来用 operator.add，research_data 只增不清。
+# 同一 session 发第二次 research，Writer 会把新旧数据混着写报告。
+# 用自定义 reducer：planner 发 [None] 作为 reset 信号，触发清空。
+def _reset_or_add(existing: list, update: list) -> list:
+    if update and update[0] is None:
+        return list(update[1:])   # None 是哨兵，清空旧数据，保留 None 之后的内容
+    return existing + update
 
-class ResearchAgent(MessagesState):
-    # 全局上下文
-    session_id:Annotated[str,reduce_share_id]
 
-    # --- 主图业务状态 ---
-    # planner 拆解出来的任务清单:
-    tasks:list[str]
-    # 路由指针:下一步指向什么节点(与子图命名分开)
-    main_route:str
+class ResearchAgent(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], operator.add]
+    tasks: list[str]
+    research_data: Annotated[list[str], _reset_or_add]  # 改为可重置的 reducer
+    session_id: str
+    intent: str
+    final_answer: str
+
+
+# 子图使用的 State
+class ReaderState(TypedDict):
+    task: str

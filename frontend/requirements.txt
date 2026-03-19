@@ -1,3 +1,0 @@
-streamlit==1.54.0
-requests==2.32.5
-python-dotenv==1.2.1

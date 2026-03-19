@@ -1,120 +1,102 @@
-<div align="center">
 
-# 🕵️ Deep Research Agent
+# 🕵️ Research Agent
 
-> 一个可在线体验的多智能体深度研究系统  
-> **LangGraph + MCP + FastAPI(SSE) + Streamlit**
+> 本地知识库智能问答系统
+> **LangGraph + MCP + RAG + FlashRank**
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-annyfly.streamlit.app-red?style=for-the-badge)](https://annyfly.streamlit.app/)
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge)
-![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-2ea44f?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge)
+![LangGraph](https://img.shields.io/badge/LangGraph-MultiAgent-2ea44f?style=for-the-badge)
 ![FastAPI](https://img.shields.io/badge/FastAPI-SSE-009688?style=for-the-badge)
-![MCP](https://img.shields.io/badge/Protocol-MCP-purple?style=for-the-badge)
-![Frontend](https://img.shields.io/badge/Frontend-Streamlit-ff4b4b?style=for-the-badge)
-
-</div>
+![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-ff4b4b?style=for-the-badge)
 
 ---
 
-## 🌐 在线体验
+## 📖 项目简介
 
-👉 **https://annyfly.streamlit.app/**
+一个基于 LangGraph 多智能体架构的本地知识库问答系统。
 
-输入一个研究问题后，你可以实时看到：
-
-- 任务规划（Planner）
-- 工具调用（`web_search` / `get_page_content` / `batch_fetch`）
-- 报告写作过程（SSE 流式输出）
-- 最终结构化研究结论 + 来源引用
+把文档放进 `data/` 目录，用自然语言提问，系统会自动规划检索策略、并发读取文件、生成结构化报告。
 
 ---
 
-## ✨ 项目亮点
-
-- **研究闭环**：完整的“问题 → 规划 → 检索 → 写作 → 报告”流水线
-- **输出透明**：前端可见每一步执行阶段和工具调用过程
-- **多 Agent 协作**：Manager / Planner / Researcher / Writer 职责清晰
-- **并发执行**：Researcher 子图并发运行，复杂主题处理更高效
-- **在线可用**：已部署可访问，支持真实交互体验
-
----
-
-## 🧠 系统工作流
+## 🧠 系统架构
 
 ```mermaid
 flowchart TD
-    M[manager] -->|chat| C[chat_node]
-    C --> END((END))
-    M -->|research| P[planner]
-    P --> D[多Agent并发]
-    D --> R1[researcher 1]
-    D --> R2[researcher 2]
-    D --> RN[researcher N]
-    R1 --> W[writer]
+    U[用户提问] --> M[Manager 意图识别]
+    M -->|chat| C[Chat 闲聊]
+    M -->|research| P[Planner 任务规划]
+    P --> D[并发分发]
+    D --> R1[Reader 1]
+    D --> R2[Reader 2]
+    D --> RN[Reader N]
+    R1 --> W[Writer 报告撰写]
     R2 --> W
     RN --> W
-    W --> END
+    W --> END((END))
+    C --> END
 ```
-
-```mermaid
-flowchart LR
-    S[surfer] --> C[core 判断返回质量]
-    C -->|质量过关| L[leader] --> W[writer]
-    C -->|质量不好| R{retry < 3?}
-    R -->|是| S
-    R -->|否| E[强制结束]
-```
-
 
 ---
 
-## 🖼️ 演示截图 / GIF
+## ✨ 核心功能
 
-### 1) 研究过程（阶段流）
+### 多智能体协作
+- **Manager**：意图识别，分流 chat/research
+- **Planner**：将复杂问题拆解为 2-4 个子任务
+- **Reader**：并发调用 MCP 工具检索知识库
+- **Writer**：汇总数据，生成结构化报告
+- **Chat**：处理日常对话
 
-![img1.png](/assets/img1.png)
-### 2) 工具调用过程（`web_search` / `batch_fetch`）
+### 智能检索
+- **向量检索**：ChromaDB + 语义 Embedding
+- **精排序**：FlashRank 重排序提升准确率
+- **置信度**：每条结果附带相似度分数
 
-![img2.png](/assets/img2.png)
-### 3) 最终报告输出
+### 多格式支持
+- PDF（pdfplumber）
+- Word（python-docx）
+- Markdown / TXT（自动编码检测）
 
-![img3.png](/assets/img3.png)
+### 增量索引
+- 文件指纹检测（mtime），变动文件才重建
+- 秒级启动，无需重复向量化
+
+### 流式输出
+- SSE 实时推送执行阶段
+- 前端可见工具调用过程
+
 ---
 
 ## 🧩 项目结构
 
 ```text
 research-agent/
-├── agents/
-│   ├── manager.py
-│   ├── planner.py
-│   ├── writer.py
-│   └── researcher/
-│       ├── graph.py
-│       ├── leader.py
-│       ├── surfer.py
-│       ├── core.py
-│       └── state.py
-├── api/
-│   ├── routes.py
-│   └── stream.py
-├── bootstrap/
-│   └── lifespan.py
-├── frontend/
+├── agents/                 # 多智能体模块
+│   ├── manager.py         # 意图识别
+│   ├── chat.py            # 闲聊处理
+│   ├── planner.py         # 任务规划
+│   ├── reader.py          # 知识检索
+│   └── writer.py          # 报告撰写
+├── tools/                  # MCP 工具
+│   ├── mcp_server_local.py    # MCP 服务
+│   ├── rag_store.py           # RAG 检索
+│   └── registry.py            # 工具注册
+├── api/                    # 后端接口
+│   ├── routes.py          # 路由
+│   └── stream.py          # SSE 流式处理
+├── frontend/               # Streamlit 前端
 │   ├── app.py
 │   ├── chat_flow.py
-│   ├── backend_client.py
+│   └── backend_client.py
 │   └── ui.py
-├── tools/
-│   ├── mcp_server_search.py
-│   ├── rag_store.py
-│   ├── registry.py
-│   └── utils_message.py
-├── graph.py
-├── state.py
-├── server.py
-├── config.py
-├── requirements.txt
+├── bootstrap/              # 生命周期管理
+├── data/                   # 知识库文件目录
+├── chroma_db/              # 向量数据库
+├── graph.py                # LangGraph 编排
+├── state.py                # 状态定义
+├── server.py               # FastAPI 入口
+├── config.py               # 配置
 ├── Dockerfile
 └── docker-compose.yml
 ```
@@ -123,53 +105,139 @@ research-agent/
 
 ## ⚡ 快速开始
 
-本项目推荐部署方式：
-
-- 前端：Streamlit Cloud（推荐）
-- 后端：自有服务器 Docker / docker-compose
-
-
-1) 后端部署（Docker）
+### 1. 克隆项目
 ```bash
-git clone https://github.com/Annyfee/research-agent.git
+git clone https://github.com/你的用户名/research-agent.git
 cd research-agent
+```
+
+### 2. 配置环境变量
+```bash
 cp .env.example .env
-vim .env
-# 填好后端需要的 API Key 等配置
+```
+
+编辑 `.env`：
+```bash
+# LLM 配置
+OPENAI_MODEL=deepseek-chat
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+
+# Embedding 配置（默认云端模式）
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
+EMBEDDING_MODEL_NAME=BAAI/bge-m3
+
+# 可选：LangSmith 追踪
+LANGCHAIN_API_KEY=xxx
+```
+
+### 3. 放入知识库文件
+```bash
+cp 你的文件.pdf data/
+cp 你的文档.docx data/
+```
+
+### 4. Docker 部署
+```bash
 docker compose up -d --build
 ```
 
-2) 前端部署（Streamlit Cloud，推荐）
-- Main file: frontend/app.py
-- 在 Streamlit Cloud 的 Secrets 里配置：
-```toml
-BACKEND_URL = "http://<你的服务器IP>:8011"
+服务启动后：
+- **MCP Server**：`http://localhost:8003`
+- **Backend API**：`http://localhost:8011`
+
+### 5. 启动前端（本地）
+```bash
+streamlit run frontend/app.py
 ```
 
-3) 本地运行前端（可选）
-docker运行后，直接运行前端命令即可
+或部署到 **Streamlit Cloud**，在 Secrets 配置：
 ```toml
-streamlit run app.py
+BACKEND_URL = "http://你的服务器IP"
+```
+
+---
+
+## 🔧 MCP 工具
+
+| 工具 | 功能 | 参数 |
+|------|------|------|
+| `list_local_files` | 列出知识库文件 | 无 |
+| `read_local_file` | 读取文件全文 | `filename` |
+| `search_local_knowledge` | 语义检索 | `query` |
+
+---
+
+## 🖼️ 使用示例
+
+### 研究模式
+```
+用户: 帮我分析所有文档中关于用户增长的策略
+
+系统:
+🧭 正在规划阅读策略...
+📂 正在翻阅本地资料库...
+  🔨 调用工具: search_local_knowledge
+  🔨 调用工具: read_local_file
+✍️ 正在提炼核心观点...
+
+【最终报告】
+基于本地文档分析，用户增长策略包括...
+```
+
+### 闲聊模式
+```
+用户: 你能做什么？
+
+系统:
+我是一个部署在本地的私有化知识库 Agent。您可以把 TXT/MD/PDF/DOCX 
+等资料放在我的 data 目录下，我能帮您并发阅读、精准检索，并生成
+深度的交叉对比报告。
 ```
 
 ---
 
 ## 🛠️ 技术栈
 
-- **Orchestration**: LangGraph, LangChain
-- **Backend**: FastAPI + SSE
-- **Frontend**: Streamlit
-- **Tool Protocol**: MCP (fastmcp)
-- **Search**: Tavily (TAVILY_API_KEY)
-- **Crawl**: Jina Reader (https://r.jina.ai/)
-- **RAG**: ChromaDB + rerank model
-- **Runtime**: asyncio
-- **Deploy**: Docker / docker-compose
+| 类别 | 技术 |
+|------|------|
+| 编排框架 | LangGraph |
+| 协议 | MCP (fastmcp) |
+| 后端 | FastAPI + SSE |
+| 前端 | Streamlit |
+| 向量数据库 | ChromaDB |
+| Embedding | OpenAI API 兼容 |
+| 重排序 | FlashRank |
+| 文件解析 | pdfplumber, python-docx |
+| 持久化 | SQLite (checkpointer) |
 
 ---
 
-## 🤝 交流与反馈
+## 📊 Embedding 模式
 
-如果你对多智能体编排、SSE 流式交互、MCP 工具扩展有想法，欢迎提 **Issue / PR**。
+在 `config.py` 中切换：
 
-如果这个项目对你有帮助，欢迎点个 **⭐ Star**！
+```python
+# True = 本地模式（需要 16G+ 内存）
+# False = 云端模式（默认）
+USE_LOCAL_EMBEDDING = False
+```
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] 支持 Excel / CSV
+- [ ] 支持图片 OCR
+- [ ] 本地 LLM 方案（Ollama）
+- [ ] Web 文件管理界面
+
+---
+
+## 🤝 贡献
+
+- 📬 提交 Issue / PR：欢迎提出改进建议或贡献代码！
+- 📩 技术交流：微信 a19731567148（备注 Agent）
+
+🌟 如果这个项目帮到了你，请给我点个 Star ⭐，这将是我持续更新的最大动力！

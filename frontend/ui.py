@@ -1,88 +1,90 @@
-# streamlit前端ui
-
 import streamlit as st
 
+
 def setup_page():
-    # 页面基础配置
     st.set_page_config(
-        page_title="深度搜索智能体",
-        page_icon="🔎",
+        page_title="私域知识洞察引擎",
+        page_icon="🗂️",
         layout="wide",
-        initial_sidebar_state="expanded" # 初始侧边栏展开
+        initial_sidebar_state="expanded"
     )
 
-    # CSS美化
     st.markdown("""
     <style>
-        /* 聊天气泡样式 */
         .stChatMessage {
             padding: 1.5rem;
             border-radius: 12px;
             margin-bottom: 1rem;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
-        /* 状态容器样式 (显示工具调用) */
         [data-testid="stStatusWidget"] {
             border: 1px solid #e0e0e0;
             border-radius: 8px;
             background-color: #f9f9f9;
         }
     </style>
-    """,unsafe_allow_html=True) # 允许渲染
+    """, unsafe_allow_html=True)
+
 
 def render_sidebar(status):
     new_chat_clicked = False
-    # 侧边栏
     with st.sidebar:
-        st.header("🔬 研究控制台")
+        st.header("🗂️ 知识控制台")
         st.caption(f"Session ID:{st.session_state.session_id}")
 
-        # 检测后端联通
+        # 【新增】手动刷新状态按钮，解决启动慢半拍的问题
+        col_a, col_b = st.columns([4, 1])
+        with col_a:
+            st.markdown("**服务监控**")
+        with col_b:
+            if st.button("🔄", help="刷新服务状态"):
+                st.rerun()
+
         if status["backend_online"]:
-            st.success("🟢 后端服务在线")
+            st.success("🟢 后端引擎在线")
             if status["mcp_online"]:
-                st.success("🟢 MCP服务在线")
+                st.success("🟢 私有知识库(MCP)就绪")
             else:
-                st.warning("⚪ MCP服务未启动 （可能是协议不匹配或暂时无响应）")
+                st.warning("⚪ 知识库挂载中 (可点击🔄刷新)")
         else:
-            st.error("🔴 后端服务离线(请启动docker)")
+            st.error("🔴 引擎离线 (请检查Docker)")
 
         st.divider()
 
-        # 历史记录管理
-        col1, col2 = st.columns(2)  # 侧边栏分两列
+        col1, col2 = st.columns(2)
         with col1:
             if st.button("🧹 新对话", use_container_width=True):
                 new_chat_clicked = True
+
         st.info("""
-        **架构说明**：
-        - **Frontend**: Streamlit (UI/交互)
-        - **Backend**: FastAPI + LangGraph (Docker容器)
-        - **Protocol**: HTTP + SSE 流式传输
+        **系统特性**：
+        - 🔒 **隐私安全**：100% 本地环境断网运行
+        - 📚 **私域底座**：自动解析 `data/` 目录文档
+        - 🧠 **双核驱动**：支持全文精读与 RAG 语义检索
         """)
         return new_chat_clicked
 
+
 def render_header():
-    # 主界面:渲染历史消息
-    st.title("🔎 Deep Research Agent")
-    st.caption("基于 LangGraph 多智能体架构 | Docker 容器化部署")
+    st.title("🕵️ Private Knowledge Agent")
+    st.caption("基于 LangGraph 架构 | 企业级私域数据洞察引擎")
+
 
 def render_history():
-    # 遍历历史记录并将其渲染
     for msg in st.session_state.message:
         role = "user" if msg["role"] == "user" else "assistant"
         avatar = "👤" if role == "user" else "🤖"
 
         with st.chat_message(role, avatar=avatar):
-            # 有工具日志，则渲染
             if "tools" in msg and msg["tools"]:
                 with st.status("✅ 历史思考过程", state="complete", expanded=False) as status:
-                    with status.expander("**📋 研究任务拆解:**", expanded=True):
-                        st.json(msg["tasks"])  # 在 status 内显示
+                    tasks = msg.get("tasks", [])
+                    if tasks:
+                        with status.expander("**📋 知识库检索策略:**", expanded=True):
+                            st.json(msg["tasks"])
                     for tool in msg["tools"]:
                         st.write(f"🔨 调用工具: **{tool['name']}**")
                         with status.expander("查看参数详情:"):
                             st.json(tool['input'])
 
-            # 再渲染正文
             st.markdown(msg["content"])

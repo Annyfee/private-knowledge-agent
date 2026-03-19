@@ -2,24 +2,27 @@
 import json
 import os
 import requests
+from urllib.parse import urlparse
 
-BACKEND_URL = os.getenv("BACKEND_URL") or "http://localhost"
+_raw_url = os.getenv("BACKEND_URL") or "http://localhost"
+
+# 检测 URL 是否已带端口，没有才补
+_parsed = urlparse(_raw_url)
+BACKEND_BASE = _raw_url if _parsed.port else f"{_raw_url}:8011"
 
 
-def stream_from_backend(user_input,session_id):
+def stream_from_backend(user_input, session_id):
     """
     连接docker后端，并把复杂的数据流按SSE协议解析成简单的Py对象
     """
-    # docker后端地址
-    api_url = f"{BACKEND_URL}:8011/chat"
+    api_url = f"{BACKEND_BASE}/chat"
     try:
         with requests.post(
             api_url,
-            json={"message":user_input,"session_id":session_id},
+            json={"message": user_input, "session_id": session_id},
             stream=True,
-            timeout=(3,300) # 防止无数据
+            timeout=(3, 300)
         ) as response:
-            # 检测限流
             if response.status_code == 429:
                 yield {"type": "error", "content": "⚠️ 每小时最多使用6次，请稍后再试"}
                 return
@@ -28,8 +31,7 @@ def stream_from_backend(user_input,session_id):
                 yield {"type": "error", "content": f"服务器报错: {response.status_code}"}
                 return
 
-            # 逐行监听
-            for line in response.iter_lines(): # iter_lines:切片模式，(发现换行)立刻切走
+            for line in response.iter_lines():
                 if line:
                     decoded_line = line.decode("utf-8")
                     if decoded_line.startswith("data:"):
@@ -37,13 +39,14 @@ def stream_from_backend(user_input,session_id):
                         if not json_str:
                             continue
                         if "[DONE]" in json_str:
-                            break # 结束
+                            break
                         try:
                             yield json.loads(json_str)
                         except Exception:
                             pass
     except Exception as e:
-        yield {"type":"error","content":f"连接失败:{str(e)}"}
+        yield {"type": "error", "content": f"连接失败:{str(e)}"}
+
 
 def check_services_status():
     """检查服务是否在线"""
@@ -52,11 +55,11 @@ def check_services_status():
         "mcp_online": False,
     }
     try:
-        r = requests.get(f"{BACKEND_URL}:8011/service/status",timeout=1.5)
+        r = requests.get(f"{BACKEND_BASE}/service/status", timeout=1.5)
         if r.status_code == 200:
             data = r.json()
             status["backend_online"] = True
-            status["mcp_online"] = data.get("mcp_online",False)
+            status["mcp_online"] = data.get("mcp_online", False)
         else:
             status["backend_online"] = False
     except Exception:

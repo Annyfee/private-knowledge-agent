@@ -12,7 +12,7 @@ services:
       - .env
     build: .
     container_name: mcp_server
-    command: ["python", "tools/mcp_server_search.py"]
+    command: ["python", "tools/mcp_server_local.py"]
     ports:
       - "8003:8003"
     restart: always
