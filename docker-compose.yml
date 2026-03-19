@@ -18,6 +18,8 @@ services:
     restart: always
     volumes:
       - ./chroma_db:/app/chroma_db  # 知识库数据持久化
+      - ./data:/app/data  # 让容器内能读取宿主机最新知识库文件
+      - ./db:/app/db      # 持久化索引状态，避免重复重建
     working_dir: /app  # 确保工作目录正确
   research-backend:
     # 构建位置(依靠当前目录的Dockerfile来构建) 与 是否自动重启
