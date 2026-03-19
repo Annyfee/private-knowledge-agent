@@ -1,5 +1,5 @@
 
-# 🕵️ Research Agent
+# 🕵️ Private Knowledge Agent
 
 > 本地知识库智能问答系统
 > **LangGraph + MCP + RAG + FlashRank**
@@ -71,7 +71,7 @@ flowchart TD
 ## 🧩 项目结构
 
 ```text
-research-agent/
+private-knowledge-agent/
 ├── agents/                 # 多智能体模块
 │   ├── manager.py         # 意图识别
 │   ├── chat.py            # 闲聊处理
@@ -107,8 +107,8 @@ research-agent/
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/你的用户名/research-agent.git
-cd research-agent
+git clone https://github.com/你的用户名/private-knowledge-agent.git
+cd private-knowledge-agent
 ```
 
 ### 2. 配置环境变量
