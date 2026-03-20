@@ -1,7 +1,6 @@
-
 # 🕵️ Private Knowledge Agent
 
-> 本地知识库智能问答系统
+> 本地知识库智能问答系统  
 > **LangGraph + MCP + RAG + FlashRank**
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge)
@@ -73,26 +72,28 @@ flowchart TD
 ```text
 private-knowledge-agent/
 ├── agents/                 # 多智能体模块
-│   ├── manager.py         # 意图识别
-│   ├── chat.py            # 闲聊处理
-│   ├── planner.py         # 任务规划
-│   ├── reader.py          # 知识检索
-│   └── writer.py          # 报告撰写
+│   ├── manager.py          # 意图识别
+│   ├── chat.py             # 闲聊处理
+│   ├── planner.py          # 任务规划
+│   ├── reader.py           # 知识检索
+│   └── writer.py           # 报告撰写
 ├── tools/                  # MCP 工具
-│   ├── mcp_server_local.py    # MCP 服务
-│   ├── rag_store.py           # RAG 检索
-│   └── registry.py            # 工具注册
+│   ├── mcp_server_local.py # MCP 服务
+│   ├── rag_store.py        # RAG 检索
+│   └── registry.py         # 工具注册
 ├── api/                    # 后端接口
-│   ├── routes.py          # 路由
-│   └── stream.py          # SSE 流式处理
+│   ├── routes.py           # 路由
+│   └── stream.py           # SSE 流式处理
 ├── frontend/               # Streamlit 前端
 │   ├── app.py
 │   ├── chat_flow.py
-│   └── backend_client.py
+│   ├── backend_client.py
 │   └── ui.py
 ├── bootstrap/              # 生命周期管理
 ├── data/                   # 知识库文件目录
 ├── chroma_db/              # 向量数据库
+├── db/                     # 索引状态/运行持久化
+├── models/                 # 本地模型与缓存目录
 ├── graph.py                # LangGraph 编排
 ├── state.py                # 状态定义
 ├── server.py               # FastAPI 入口
@@ -123,19 +124,18 @@ OPENAI_MODEL=deepseek-chat
 OPENAI_API_KEY=sk-xxx
 OPENAI_BASE_URL=https://api.deepseek.com/v1
 
-# Embedding 配置（默认云端模式）
-EMBEDDING_API_KEY=sk-xxx
-EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
-EMBEDDING_MODEL_NAME=BAAI/bge-m3
-
 # 可选：LangSmith 追踪
 LANGCHAIN_API_KEY=xxx
 ```
 
-### 3. 放入知识库文件
+### 3. 准备知识与模型文件
 ```bash
+# 知识库文件
 cp 你的文件.pdf data/
 cp 你的文档.docx data/
+
+# 本地 Embedding 模型目录（默认路径）
+# models/embedding/bge-m3
 ```
 
 ### 4. Docker 部署
@@ -189,22 +189,10 @@ BACKEND_URL = "http://你的服务器IP"
 | 后端 | FastAPI + SSE |
 | 前端 | Streamlit |
 | 向量数据库 | ChromaDB |
-| Embedding | OpenAI API 兼容 |
+| Embedding | HuggingFace (BAAI/bge-m3, 本地加载) |
 | 重排序 | FlashRank |
 | 文件解析 | pdfplumber, python-docx |
 | 持久化 | SQLite (checkpointer) |
-
----
-
-## 📊 Embedding 模式
-
-在 `config.py` 中切换：
-
-```python
-# True = 本地模式（需要 16G+ 内存）
-# False = 云端模式（默认）
-USE_LOCAL_EMBEDDING = False
-```
 
 ---
 
