@@ -42,8 +42,8 @@ def stream_from_backend(user_input, session_id):
                             break
                         try:
                             yield json.loads(json_str)
-                        except Exception:
-                            pass
+                        except Exception as parse_err:
+                            print(f"[SSE_PARSE_WARN] {parse_err} | raw={json_str}")  # 解析异常记录日志，避免静默吞错
     except Exception as e:
         yield {"type": "error", "content": f"连接失败:{str(e)}"}
 
