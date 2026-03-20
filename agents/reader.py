@@ -26,6 +26,9 @@ async def reader_node(state: ReaderState):
     """
     try:
         tools_list = await load_all_tools()
+        if not tools_list:
+            logger.error("❌ [Reader] MCP 工具未就绪，无法执行基于知识库的研究任务")  # 工具不可用时显式失败，避免无依据输出“研究结论”
+            return {"research_data": [f"【任务结果】 {task}\n知识库检索工具当前不可用，无法生成基于本地资料的可靠结论。"]}
         agent = create_react_agent(get_llm(temperature=0.1), tools=tools_list)
         input_messages = [
             SystemMessage(content=sys_prompt),
