@@ -8,6 +8,8 @@ services:
   mcp-server:
     environment:
       - PYTHONPATH=/app #添加到搜索路径
+      - HF_HOME=/app/models/hf_home # HuggingFace 缓存目录持久化到工作卷，避免每次容器重建都重复下载
+      - SENTENCE_TRANSFORMERS_HOME=/app/models/sentence_transformers # sentence-transformers 缓存目录固定到持久化路径
     env_file:
       - .env
     build: .
@@ -16,10 +18,11 @@ services:
     ports:
       - "8003:8003"
     restart: always
-    volumes:
+    volumes: # 文件热更新  host:container
       - ./chroma_db:/app/chroma_db  # 知识库数据持久化
       - ./data:/app/data  # 让容器内能读取宿主机最新知识库文件
       - ./db:/app/db      # 持久化索引状态，避免重复重建
+      - ./models:/app/models # 挂载模型目录，Embedding/Rerank 下载后可复用，缩短后续启动时间
     working_dir: /app  # 确保工作目录正确
   research-backend:
     # 构建位置(依靠当前目录的Dockerfile来构建) 与 是否自动重启
@@ -34,7 +37,7 @@ services:
     volumes:
       # 映射文件
       - .:/app
-      # 保护容器内的大文件/依赖 防止主机内容器为空覆盖
+      # 保护容器内的大文件/依赖
       - /app/.venv1
       - /app/chroma_db
     env_file:

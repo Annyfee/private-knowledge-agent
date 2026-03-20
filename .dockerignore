@@ -7,3 +7,6 @@ db/
 logs/
 __pycache__/
 *.py[cod]
+models/
+data/
+.git/

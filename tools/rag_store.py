@@ -1,38 +1,32 @@
 import os
+import threading
 from flashrank import Ranker, RerankRequest
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
-
-from config import USE_LOCAL_EMBEDDING, EMBEDDING_API_KEY, EMBEDDING_BASE_URL, EMBEDDING_MODEL_NAME
+from langchain_huggingface import HuggingFaceEmbeddings
+from config import EMBEDDING_MODEL_NAME, EMBEDDING_MODEL_LOCAL_PATH, EMBEDDING_LOCAL_ONLY
 
 
 class RAGStore:
     def __init__(self):
-        logger.info(f"🚀 [Init] 初始化 RAG 系统 | 模式: {'纯本地' if USE_LOCAL_EMBEDDING else '云端API'}")
+        logger.info("🚀 [Init] 初始化 RAG 系统 | 模式: 纯本地")  # 固定为本地 Embedding 模式
 
-        # Embedding 初始化
-        if USE_LOCAL_EMBEDDING:
-            from langchain_huggingface import HuggingFaceEmbeddings
-            logger.info(f"📥 正在加载本地模型: {EMBEDDING_MODEL_NAME}...")
-            self.embedding = HuggingFaceEmbeddings(
-                model_name=EMBEDDING_MODEL_NAME,
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-        else:
-            from langchain_openai import OpenAIEmbeddings
-            if not EMBEDDING_API_KEY or not EMBEDDING_API_KEY.startswith("sk-"):
-                logger.error("❌ 未配置 EMBEDDING_API_KEY，无法使用云端模式！")
-                raise ValueError("API Key Missing")
-            logger.info(f"☁️ 正在连接云端 Embedding: {EMBEDDING_MODEL_NAME}...")
-            self.embedding = OpenAIEmbeddings(
-                model=EMBEDDING_MODEL_NAME,
-                openai_api_key=EMBEDDING_API_KEY,
-                openai_api_base=EMBEDDING_BASE_URL,
-                check_embedding_ctx_length=False
-            )
+        # 本地 Embedding 初始化
+        model_source = EMBEDDING_MODEL_LOCAL_PATH if os.path.isdir(EMBEDDING_MODEL_LOCAL_PATH) else EMBEDDING_MODEL_NAME  # 优先使用已挂载的本地目录模型
+        if EMBEDDING_LOCAL_ONLY and model_source == EMBEDDING_MODEL_NAME:
+            raise FileNotFoundError(
+                f"本地模型目录不存在: {EMBEDDING_MODEL_LOCAL_PATH}。"
+                f"请先下载模型到该目录，或确认卷挂载是否生效。"
+            )  # 本地模式下快速失败并给出明确原因，避免远程下载长时间阻塞
+        logger.info(f"📥 正在加载本地模型: {model_source}...")
+        self.embedding = HuggingFaceEmbeddings(
+            model_name=model_source,
+            cache_folder=None if model_source == EMBEDDING_MODEL_LOCAL_PATH else "./models/sentence_transformers",  # 本地目录直读时跳过缓存目录，避免缓存锁导致启动等待
+            model_kwargs={'device': 'cpu', 'local_files_only': EMBEDDING_LOCAL_ONLY},  # 强制仅从本地文件加载，不触发网络下载
+            encode_kwargs={'normalize_embeddings': True}
+        )
 
         # 文本切分器
         self.splitter = RecursiveCharacterTextSplitter(
@@ -46,6 +40,7 @@ class RAGStore:
             persist_directory="./chroma_db",
             embedding_function=self.embedding
         )
+        self._write_lock = threading.Lock()  # 为向量库写入加锁，降低并发写入不稳定风险
 
         # 重排序模型
         self.reranker = Ranker(
@@ -64,13 +59,14 @@ class RAGStore:
         raw_doc = Document(page_content=text_content, metadata={"source_url": source_url, "session_id": session_id})
         chunks = self.splitter.split_documents([raw_doc])
         # --- 分批入库 ---
-        # 某些API平台限制单次 batch，我们设为 50 比较安全
+        # 某些平台限制单次 batch，我们设为 50 比较安全
         batch_size = 50
-        for i in range(0,len(chunks),batch_size):
-            # 调用向量库内置方法:将这一批次(50个)文本片段发送给 Embedding模型进行向量化，再将生成的向量连同原始文本、元数据一同持久化存储到本地Chroma数据库中
-            # 简单讲，此处囊括了 文本向量化+存入向量数据库 两步
-            # 注意:在此步前，我们的batch一直都还是非向量形态
-            self.vector_store.add_documents(chunks[i:i+batch_size])
+        with self._write_lock:  # 串行化临界区写入，避免线程池并发调用 add_documents
+            for i in range(0,len(chunks),batch_size):
+                # 调用向量库内置方法:将这一批次(50个)文本片段发送给 Embedding模型进行向量化，再将生成的向量连同原始文本、元数据一同持久化存储到本地Chroma数据库中
+                # 简单讲，此处囊括了 文本向量化+存入向量数据库 两步
+                # 注意:在此步前，我们的batch一直都还是非向量形态
+                self.vector_store.add_documents(chunks[i:i+batch_size])
         logger.info(f"💾   {source_url} -> {len(chunks)} 个片段")
         return True
 

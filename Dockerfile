@@ -20,7 +20,9 @@ COPY requirements.txt .
 
 # pip 稳定安装策略：主源 + 备用源 + 超时重试
 RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu --retries 8 && \
     pip install --no-cache-dir -r requirements.txt --retries 8
+# 安装足够详细的指定版本，避免 CUDA 依赖链暴涨，并满足 transformers 的安全版本要求
 
 # 搬代码(源路径-目标路径/工作目录):把当前文件夹所有东西全部拷贝到容器里的/app文件夹下
 COPY . .
