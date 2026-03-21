@@ -23,17 +23,22 @@ async def planner_node(state: ResearchAgent):
     try:
         human_meg = [m for m in state["messages"] if isinstance(m, HumanMessage)][-2:]
         response = await get_llm(0.1).ainvoke([SystemMessage(content=SYS_PROMPT),*human_meg])
-        raw = (response.content or "").strip()
+        raw = (response.content or "")
+        if not isinstance(raw, str):
+            raw = str(raw)
+        raw = raw.strip().lstrip("\ufeff")  # 兼容开头 BOM，避免 fenced JSON 误判
 
         # 兼容格式1: 纯 JSON
         try:
             tasks = json.loads(raw)["tasks"]
         except Exception:
-            # 兼容格式2: ```json ... ``` 包裹的 JSON（仅处理这种固定格式）
-            if raw.startswith("```json"):
-                raw = raw[len("```json"):].strip()
-                if raw.endswith("```"):
-                    raw = raw[:-3].strip()
+            # 兼容格式2: ```json ... ```（容忍大小写和首行空格）
+            if raw.startswith("```") and raw.endswith("```"):
+                lines = raw.splitlines()
+                if lines:
+                    first = lines[0].strip().lower().replace(" ", "")
+                    if first in ("```json", "```"):
+                        raw = "\n".join(lines[1:-1]).strip()
             tasks = json.loads(raw)["tasks"]
 
         # 校验必须是非空列表，且每个元素都是字符串
