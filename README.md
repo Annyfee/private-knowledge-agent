@@ -38,6 +38,18 @@ flowchart TD
 
 ---
 
+## 🖼️ 使用示例
+
+### 闲聊模式
+![img1.png](assets/img1.png)
+
+### 研究模式
+![img2.png](assets/img2.png)
+![img3.png](assets/img3.png)
+
+---
+
+
 ## ✨ 核心功能
 
 ### 多智能体协作
@@ -169,16 +181,6 @@ BACKEND_URL = "http://你的服务器IP"
 
 ---
 
-## 🖼️ 使用示例
-
-### 闲聊模式
-![img1.png](assets/img1.png)
-
-### 研究模式
-![img2.png](assets/img2.png)
-![img3.png](assets/img3.png)
-
----
 
 ## 🛠️ 技术栈
 
@@ -193,6 +195,27 @@ BACKEND_URL = "http://你的服务器IP"
 | 重排序 | FlashRank |
 | 文件解析 | pdfplumber, python-docx |
 | 持久化 | SQLite (checkpointer) |
+
+---
+
+## 🧪 评测
+
+项目内置了回归评测文件，用来验证 `/chat` SSE 接口在稳定性、回答约束、来源引用和延迟上的表现。
+
+常用命令：
+
+```bash
+# 完整评测
+python scripts/run_eval.py --dataset evals/eval_set.jsonl --timeout 200
+
+# 快速冒烟
+python scripts/run_eval.py --dataset evals/eval_test.jsonl --timeout 200
+```
+
+结果会输出到 `evals/results/`。更详细的说明见：
+
+- `evals/README.md`
+- `evals/EVAL_CASE_GUIDE.md`
 
 ---
 
