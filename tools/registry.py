@@ -8,10 +8,10 @@ SERVICE_STATUS = {
     "mcp_online": False
 }
 
-GLOBAL_MCP_CLIENT = None
-GLOBAL_TOOLS = []
+GLOBAL_MCP_CLIENT = None # 全局复用单个客户端实例
+GLOBAL_TOOLS = [] # 全局工具缓存
 
-# 用 asyncio.Lock + double-check 保证只有一个协程真正执行连接
+# 协程锁
 _LOAD_LOCK = asyncio.Lock()
 
 
@@ -19,10 +19,11 @@ async def load_all_tools():
     """初始化并返回所有可用工具列表 (带单例缓存 + 并发安全锁)"""
     global GLOBAL_MCP_CLIENT, GLOBAL_TOOLS
 
-    # 快速路径：已缓存直接返回，不进锁（99% 的调用走这里）
+    # 快速路径：已缓存直接返回，不进锁
     if GLOBAL_TOOLS:
         return GLOBAL_TOOLS
 
+    # 并发高峰，只允许一个协程能进入
     async with _LOAD_LOCK:
         # double-check：拿到锁后再判断一次，防止锁等待期间其他协程已完成初始化
         if GLOBAL_TOOLS:
