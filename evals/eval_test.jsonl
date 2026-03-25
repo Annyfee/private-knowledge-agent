@@ -1,0 +1,1 @@
+{"id":"research_002","type":"research","question":"请基于本地知识库说明 QUIC 的定位，并明确它和 UDP 的关系。回答末尾请写【来源文件: xxx】。","must_include":["QUIC","UDP"],"must_not_include":[],"expected_sources":["EVAL_02_quic_transport.txt"],"tags":["research","quic","txt"]}
