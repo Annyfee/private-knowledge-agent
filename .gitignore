@@ -11,3 +11,4 @@ __pycache__/
 generate_integrated_file.py
 integrated_research_agent.txt
 data/
+docs/
